@@ -1,0 +1,49 @@
+{
+  "name": "ai-calling-full-stack",
+  "version": "1.0.0",
+  "description": "AI Calling System - Full Stack with Backend and Frontend",
+  "main": "server-standalone.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server-standalone.js",
+    "dev": "node server-standalone.js",
+    "build": "echo 'No build step required'",
+    "health": "curl http://localhost:$PORT/health || curl http://localhost:3001/health",
+    "frontend:install": "cd frontend && npm install",
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:preview": "cd frontend && npm run preview",
+    "install:all": "npm install && npm run frontend:install",
+    "dev:backend": "node server-standalone.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:all": "npm run frontend:build",
+    "test:deployment": "node test-deployment.js",
+    "deploy": "./deploy.sh",
+    "deploy:prod": "./production-deploy.sh"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.50.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "twilio": "^5.7.1",
+    "ws": "^8.18.2"
+  },
+  "keywords": [
+    "ai",
+    "calling",
+    "twilio",
+    "gemini",
+    "voice",
+    "assistant"
+  ],
+  "author": "AI Calling System",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/diamondgray669/AI-Call-Front-Back.git"
+  }
+}

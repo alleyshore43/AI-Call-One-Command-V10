@@ -1,0 +1,38 @@
+{
+    "name": "@tw2gem/audio-converter",
+    "version": "1.0.1",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist/**/*"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.json"
+    },
+    "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    },
+    "description": "TypeScript utilities to convert audio formats (e.g., PCM, mu-law) and resample audio for real-time streaming with Twilio or AI models.",
+    "keywords": [
+        "audio",
+        "pcm",
+        "mulaw",
+        "conversion",
+        "resampling",
+        "twilio",
+        "streaming",
+        "typescript",
+        "real-time",
+        "audio-utils"
+    ],
+    "author": {
+        "name": "Sebastian Morales Lorca",
+        "email": "seba.morales.lorca@gmail.com"
+    },
+    "devDependencies": {
+        "@types/node": "^24.0.3",
+        "typescript": "^5.8.3"
+    }
+}

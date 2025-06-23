@@ -1,0 +1,40 @@
+{
+    "name": "@tw2gem/twilio-server",
+    "version": "1.0.1",
+    "type": "module",
+    "description": "WebSocket server for receiving real-time audio streams from Twilio calls and processing them for further use.",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist/**/*"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.json"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "keywords": [
+        "twilio",
+        "voice",
+        "websocket",
+        "twilio-media-stream",
+        "audio",
+        "real-time",
+        "typescript",
+        "streaming"
+    ],
+    "author": {
+        "name": "Sebastian Morales Lorca",
+        "email": "seba.morales.lorca@gmail.com"
+    },
+    "license": "MIT",
+    "dependencies": {
+        "ws": "^8.18.2"
+    },
+    "devDependencies": {
+        "@types/node": "^24.0.3",
+        "@types/ws": "^8.18.1",
+        "typescript": "^5.8.3"
+    }
+}
