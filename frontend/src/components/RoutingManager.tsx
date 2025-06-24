@@ -252,62 +252,42 @@ const RoutingManager: React.FC = () => {
 
   const saveIVRConfig = async () => {
     try {
-      // Save IVR menu
-      let menuId = ivrMenu?.id;
-      
-      if (!menuId) {
-        // Create new IVR menu
-        if (!user) {
-          console.error('No user found');
-          return;
-        }
-        
-        const newMenu = await DatabaseService.createIVRMenu({
+      if (!user) {
+        console.error('No user found');
+        return;
+      }
+
+      const menuData = {
+        name: ivrMenu?.name || 'Main Menu',
+        greeting_text: ivrMenu?.greeting_text || 'Thank you for calling. Please select from the following options.',
+        timeout_seconds: ivrMenu?.timeout_seconds || 10,
+        max_attempts: ivrMenu?.max_attempts || 3,
+        is_active: ivrMenu?.is_active !== false
+      };
+
+      const response = await fetch('/api/ivr/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           profile_id: user.id,
-          name: 'Main Menu',
-          greeting_text: ivrMenu?.greeting_text || 'Thank you for calling. Please select from the following options.',
-          is_active: true
-        });
-        
-        menuId = newMenu.id;
-        setIvrMenu(newMenu);
+          menu_data: menuData,
+          options: ivrOptions
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setIvrMenu(result.menu);
+        alert('✅ IVR configuration saved successfully!');
+        loadData();
       } else {
-        // Update existing menu
-        await DatabaseService.updateIVRMenu(menuId, {
-          greeting_text: ivrMenu?.greeting_text || 'Thank you for calling. Please select from the following options.',
-          is_active: true
-        });
+        throw new Error('Failed to save IVR configuration');
       }
-      
-      // Save IVR options
-      for (const option of ivrOptions) {
-        if (option.id) {
-          // Update existing option
-          await DatabaseService.updateIVROption(option.id, {
-            digit: option.digit,
-            description: option.description,
-            agent_id: option.agent_id,
-            action_type: option.action_type,
-            action_data: option.action_data
-          });
-        } else {
-          // Create new option
-          await DatabaseService.createIVROption({
-            ivr_menu_id: menuId,
-            digit: option.digit,
-            description: option.description,
-            agent_id: option.agent_id,
-            action_type: option.action_type,
-            action_data: option.action_data
-          });
-        }
-      }
-      
-      alert('IVR configuration saved successfully!');
-      loadData();
     } catch (error) {
       console.error('Error saving IVR configuration:', error);
-      alert('Error saving IVR configuration');
+      alert('❌ Error saving IVR configuration. Please try again.');
     }
   };
 

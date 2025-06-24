@@ -37,6 +37,20 @@ export default function EnhancedCampaignsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'created' | 'performance'>('created');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newCampaignData, setNewCampaignData] = useState({
+    name: '',
+    description: '',
+    caller_id: '',
+    max_concurrent_calls: 1,
+    call_timeout_seconds: 30,
+    retry_attempts: 3,
+    retry_delay_minutes: 60,
+    timezone: 'America/New_York',
+    days_of_week: [1, 2, 3, 4, 5], // Monday to Friday
+    start_time: '09:00',
+    end_time: '17:00'
+  });
 
   useEffect(() => {
     if (user && canUseOutboundDialer) {
@@ -244,7 +258,58 @@ export default function EnhancedCampaignsPage() {
   };
 
   const formatPercentage = (value: number) => `${value.toFixed(1)}%`;
-  // Removed unused function
+
+  const handleCreateCampaign = async () => {
+    try {
+      const response = await fetch('/api/campaigns', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...newCampaignData,
+          profile_id: user?.id
+        })
+      });
+
+      if (response.ok) {
+        const campaign = await response.json();
+        setCampaigns(prev => [campaign, ...prev]);
+        setShowCreateModal(false);
+        resetNewCampaignForm();
+        toast.success('Campaign created successfully');
+      } else {
+        throw new Error('Failed to create campaign');
+      }
+    } catch (error) {
+      console.error('Error creating campaign:', error);
+      toast.error('Failed to create campaign');
+    }
+  };
+
+  const resetNewCampaignForm = () => {
+    setNewCampaignData({
+      name: '',
+      description: '',
+      caller_id: '',
+      max_concurrent_calls: 1,
+      call_timeout_seconds: 30,
+      retry_attempts: 3,
+      retry_delay_minutes: 60,
+      timezone: 'America/New_York',
+      days_of_week: [1, 2, 3, 4, 5],
+      start_time: '09:00',
+      end_time: '17:00'
+    });
+  };
+
+  const handleNewCampaignInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    setNewCampaignData(prev => ({
+      ...prev,
+      [name]: type === 'number' ? parseInt(value) || 0 : value
+    }));
+  };
 
   if (!canUseOutboundDialer) {
     return (
@@ -275,7 +340,7 @@ export default function EnhancedCampaignsPage() {
           <p className="text-gray-600">Manage and monitor your outbound calling campaigns</p>
         </div>
         <button
-          onClick={() => {/* TODO: Implement create modal */}}
+          onClick={() => setShowCreateModal(true)}
           className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors flex items-center space-x-2"
         >
           <PlusIcon className="h-5 w-5" />
@@ -493,7 +558,172 @@ export default function EnhancedCampaignsPage() {
         </div>
       )}
 
-      {/* Modals would go here - CreateCampaignModal, LeadsModal, StatsModal */}
+      {/* Create Campaign Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Create New Campaign</h2>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Campaign Name *</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={newCampaignData.name}
+                  onChange={handleNewCampaignInputChange}
+                  className="w-full border rounded p-2"
+                  placeholder="Enter campaign name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <textarea
+                  name="description"
+                  value={newCampaignData.description}
+                  onChange={handleNewCampaignInputChange}
+                  className="w-full border rounded p-2"
+                  rows={3}
+                  placeholder="Campaign description"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Caller ID</label>
+                  <input
+                    type="text"
+                    name="caller_id"
+                    value={newCampaignData.caller_id}
+                    onChange={handleNewCampaignInputChange}
+                    className="w-full border rounded p-2"
+                    placeholder="+1234567890"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Max Concurrent Calls</label>
+                  <input
+                    type="number"
+                    name="max_concurrent_calls"
+                    value={newCampaignData.max_concurrent_calls}
+                    onChange={handleNewCampaignInputChange}
+                    className="w-full border rounded p-2"
+                    min="1"
+                    max="10"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Call Timeout (seconds)</label>
+                  <input
+                    type="number"
+                    name="call_timeout_seconds"
+                    value={newCampaignData.call_timeout_seconds}
+                    onChange={handleNewCampaignInputChange}
+                    className="w-full border rounded p-2"
+                    min="15"
+                    max="120"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Retry Attempts</label>
+                  <input
+                    type="number"
+                    name="retry_attempts"
+                    value={newCampaignData.retry_attempts}
+                    onChange={handleNewCampaignInputChange}
+                    className="w-full border rounded p-2"
+                    min="0"
+                    max="10"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Retry Delay (minutes)</label>
+                  <input
+                    type="number"
+                    name="retry_delay_minutes"
+                    value={newCampaignData.retry_delay_minutes}
+                    onChange={handleNewCampaignInputChange}
+                    className="w-full border rounded p-2"
+                    min="5"
+                    max="1440"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Timezone</label>
+                <select
+                  name="timezone"
+                  value={newCampaignData.timezone}
+                  onChange={handleNewCampaignInputChange}
+                  className="w-full border rounded p-2"
+                >
+                  <option value="America/New_York">Eastern Time</option>
+                  <option value="America/Chicago">Central Time</option>
+                  <option value="America/Denver">Mountain Time</option>
+                  <option value="America/Los_Angeles">Pacific Time</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Start Time</label>
+                  <input
+                    type="time"
+                    name="start_time"
+                    value={newCampaignData.start_time}
+                    onChange={handleNewCampaignInputChange}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">End Time</label>
+                  <input
+                    type="time"
+                    name="end_time"
+                    value={newCampaignData.end_time}
+                    onChange={handleNewCampaignInputChange}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 text-gray-600 border rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateCampaign}
+                  disabled={!newCampaignData.name}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  Create Campaign
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

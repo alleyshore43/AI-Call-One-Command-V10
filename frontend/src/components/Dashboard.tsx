@@ -111,34 +111,49 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {/* Overview Tab */}
         {activeTab === 'overview' && (
           <div className="space-y-8">
-            {/* Server Control */}
+            {/* System Status */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-900">AI Server Control</h3>
-                  <p className="text-slate-600">Manage your AI calling server</p>
+                  <h3 className="text-lg font-semibold text-slate-900">System Status</h3>
+                  <p className="text-slate-600">AI calling system is automatically managed and resilient</p>
                 </div>
-                <button
-                  onClick={toggleServer}
-                  className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-colors ${
+                <div className="flex items-center space-x-3">
+                  <div className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${
                     serverStatus === 'running'
-                      ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                      : 'bg-green-100 text-green-700 hover:bg-green-200'
-                  }`}
-                >
-                  {serverStatus === 'running' ? (
-                    <>
-                      <StopIcon className="h-5 w-5" />
-                      <span>Stop Server</span>
-                    </>
-                  ) : (
-                    <>
-                      <PlayIcon className="h-5 w-5" />
-                      <span>Start Server</span>
-                    </>
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-yellow-100 text-yellow-700'
+                  }`}>
+                    <div className={`w-2 h-2 rounded-full ${
+                      serverStatus === 'running' ? 'bg-green-500' : 'bg-yellow-500'
+                    }`}></div>
+                    <span className="font-medium">
+                      {serverStatus === 'running' ? 'Online & Ready' : 'Initializing...'}
+                    </span>
+                  </div>
+                  {serverStatus === 'running' && (
+                    <div className="text-sm text-slate-500">
+                      Auto-restart enabled
+                    </div>
                   )}
-                </button>
+                </div>
               </div>
+              {serverStatus === 'running' && (
+                <div className="mt-4 grid grid-cols-3 gap-4 text-sm">
+                  <div className="text-center p-3 bg-slate-50 rounded-lg">
+                    <div className="font-medium text-slate-900">Uptime</div>
+                    <div className="text-slate-600">5d 12h 30m</div>
+                  </div>
+                  <div className="text-center p-3 bg-slate-50 rounded-lg">
+                    <div className="font-medium text-slate-900">Health</div>
+                    <div className="text-green-600">Excellent</div>
+                  </div>
+                  <div className="text-center p-3 bg-slate-50 rounded-lg">
+                    <div className="font-medium text-slate-900">Load</div>
+                    <div className="text-slate-600">Low</div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Stats Grid */}

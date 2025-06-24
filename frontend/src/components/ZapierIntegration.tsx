@@ -40,11 +40,11 @@ export default function ZapierIntegration() {
   const loadWebhooks = async () => {
     try {
       setLoading(true);
-      // For now, we'll use localStorage to simulate database storage
-      // In production, this would be a proper database call
-      const stored = localStorage.getItem(`zapier_webhooks_${user?.id}`);
-      const webhooks = stored ? JSON.parse(stored) : [];
-      setWebhooks(webhooks);
+      const response = await fetch(`/api/zapier/webhooks?profile_id=${user?.id}`);
+      if (response.ok) {
+        const webhooks = await response.json();
+        setWebhooks(webhooks);
+      }
     } catch (error) {
       console.error('Error loading webhooks:', error);
     } finally {
@@ -56,28 +56,30 @@ export default function ZapierIntegration() {
     e.preventDefault();
     
     try {
-      const webhook: ZapierWebhook = {
-        id: editingWebhook?.id || Date.now().toString(),
+      const webhookData = {
         ...formData,
-        created_at: editingWebhook?.created_at || new Date().toISOString()
+        profile_id: user?.id
       };
 
-      let updatedWebhooks;
-      if (editingWebhook) {
-        updatedWebhooks = webhooks.map(w => w.id === webhook.id ? webhook : w);
-      } else {
-        updatedWebhooks = [...webhooks, webhook];
-      }
+      const response = await fetch('/api/zapier/webhooks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(webhookData)
+      });
 
-      // Store in localStorage (in production, this would be a database call)
-      localStorage.setItem(`zapier_webhooks_${user?.id}`, JSON.stringify(updatedWebhooks));
-      
-      setWebhooks(updatedWebhooks);
-      resetForm();
-      
-      // Test the webhook
-      if (webhook.is_active) {
-        await testWebhook(webhook);
+      if (response.ok) {
+        const webhook = await response.json();
+        setWebhooks(prev => [...prev, webhook]);
+        resetForm();
+        
+        // Test the webhook
+        if (webhook.is_active) {
+          await testWebhook(webhook);
+        }
+      } else {
+        throw new Error('Failed to save webhook');
       }
     } catch (error) {
       console.error('Error saving webhook:', error);
@@ -129,9 +131,20 @@ export default function ZapierIntegration() {
 
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this webhook?')) {
-      const updatedWebhooks = webhooks.filter(w => w.id !== id);
-      localStorage.setItem(`zapier_webhooks_${user?.id}`, JSON.stringify(updatedWebhooks));
-      setWebhooks(updatedWebhooks);
+      try {
+        const response = await fetch(`/api/zapier/webhooks/${id}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          setWebhooks(prev => prev.filter(w => w.id !== id));
+        } else {
+          throw new Error('Failed to delete webhook');
+        }
+      } catch (error) {
+        console.error('Error deleting webhook:', error);
+        alert('Error deleting webhook. Please try again.');
+      }
     }
   };
 

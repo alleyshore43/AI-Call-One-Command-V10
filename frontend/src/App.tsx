@@ -20,6 +20,7 @@ import BillingPage from './pages/BillingPage';
 import StatusPage from './pages/StatusPage';
 import SettingsPage from './pages/SettingsPage';
 import AdminUsersPage from './pages/AdminUsersPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 import RoutingPage from './pages/RoutingPage';
 import Layout from './components/Layout';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -123,6 +124,11 @@ function AppContent() {
         <Route path="/settings" element={
           <ProtectedRoute requiredPermission="settings">
             <SettingsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/dashboard" element={
+          <ProtectedRoute adminOnly>
+            <AdminDashboardPage />
           </ProtectedRoute>
         } />
         <Route path="/admin/users" element={

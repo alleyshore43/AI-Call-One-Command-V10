@@ -11,6 +11,7 @@ import {
 import { useUser } from '../contexts/UserContext';
 import { DatabaseService } from '../services/database';
 import { RealtimeService } from '../services/realtime';
+import { WebhookService } from '../services/webhook';
 import type { Appointment } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -91,8 +92,20 @@ export default function AppointmentsPage() {
   };
 
   const handleStatusChange = async (appointmentId: string, newStatus: string) => {
+    if (!user) return;
+    
     try {
-      await DatabaseService.updateAppointment(appointmentId, { status: newStatus });
+      const updatedAppointment = await DatabaseService.updateAppointment(appointmentId, { status: newStatus });
+      
+      // Send appropriate webhook based on status
+      if (newStatus === 'cancelled') {
+        await WebhookService.appointmentCancelled(updatedAppointment, user.id);
+      } else if (newStatus === 'completed') {
+        await WebhookService.appointmentCompleted(updatedAppointment, user.id);
+      } else {
+        await WebhookService.appointmentUpdated(updatedAppointment, user.id);
+      }
+      
       toast.success(`Appointment ${newStatus}`);
     } catch (error) {
       console.error('Error updating appointment:', error);
@@ -350,6 +363,7 @@ export default function AppointmentsPage() {
       {showEditModal && selectedAppointment && (
         <EditAppointmentModal
           appointment={selectedAppointment}
+          user={user}
           onClose={() => {
             setShowEditModal(false);
             setSelectedAppointment(null);
@@ -381,11 +395,16 @@ function CreateAppointmentModal({ onClose, onSuccess }: { onClose: () => void; o
 
     setLoading(true);
     try {
-      await DatabaseService.createAppointment({
+      const appointmentData = {
         ...formData,
         profile_id: user.id,
         status: 'scheduled'
-      });
+      };
+      
+      const newAppointment = await DatabaseService.createAppointment(appointmentData);
+      
+      // Send webhook notifications to integrated systems
+      await WebhookService.appointmentCreated(newAppointment, user.id);
       
       toast.success('Appointment scheduled successfully');
       onSuccess();
@@ -527,10 +546,12 @@ function CreateAppointmentModal({ onClose, onSuccess }: { onClose: () => void; o
 // Edit Appointment Modal Component (similar structure to Create)
 function EditAppointmentModal({ 
   appointment, 
+  user,
   onClose, 
   onSuccess 
 }: { 
   appointment: Appointment; 
+  user: any;
   onClose: () => void; 
   onSuccess: () => void 
 }) {
@@ -551,10 +572,15 @@ function EditAppointmentModal({
 
     setLoading(true);
     try {
-      await DatabaseService.updateAppointment(appointment.id, {
+      const updatedAppointment = await DatabaseService.updateAppointment(appointment.id, {
         ...formData,
         appointment_date: new Date(formData.appointment_date).toISOString()
       });
+      
+      // Send webhook notification for appointment update
+      if (user) {
+        await WebhookService.appointmentUpdated(updatedAppointment, user.id);
+      }
       
       toast.success('Appointment updated successfully');
       onSuccess();
