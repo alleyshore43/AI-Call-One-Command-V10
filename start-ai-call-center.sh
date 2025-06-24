@@ -37,6 +37,12 @@ if ! command_exists pm2; then
     npm install -g pm2
 fi
 
+# Check for TypeScript and install if missing
+if ! command_exists tsc; then
+    echo "📦 Installing TypeScript globally..."
+    npm install -g typescript
+fi
+
 echo "✅ All dependencies are available"
 
 # Install packages
@@ -83,6 +89,13 @@ if [ -d "packages" ]; then
             if [ "$package_name" != "examples" ]; then
                 echo "🔨 Building $package_name..."
                 cd "$package_dir"
+                
+                # Ensure TypeScript is installed for packages that need it
+                if [ "$package_name" = "audio-converter" ] || grep -q '"typescript"' package.json; then
+                    echo "📦 Ensuring TypeScript is installed for $package_name..."
+                    npm install --save-dev typescript
+                fi
+                
                 if grep -q '"build"' package.json; then
                     npm run build
                 fi
@@ -125,6 +138,20 @@ VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 VITE_API_URL=http://localhost:12001
 EOF
+    fi
+    
+    # Ensure vite.config.ts has correct proxy configuration
+    if [ -f frontend/vite.config.ts ]; then
+        echo "🔧 Checking frontend proxy configuration..."
+        # Check if proxy is configured correctly
+        if ! grep -q "target: 'http://localhost:12001'" frontend/vite.config.ts; then
+            echo "🔧 Updating vite.config.ts proxy configuration..."
+            # Create a temporary file with the correct configuration
+            sed -i 's|target:.*work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev|target: '\''http://localhost:12001'\''|g' frontend/vite.config.ts
+            echo "✅ Frontend proxy configuration updated"
+        else
+            echo "✅ Frontend proxy configuration is correct"
+        fi
     fi
 }
 
