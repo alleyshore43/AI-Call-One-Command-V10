@@ -92,8 +92,7 @@ For production use, you can also configure:
 
 ```
 AI-Call-One-Command-V3/
-├── start-ai-call-center.sh   # Single deployment script
-├── setup-frontend-env.sh     # Frontend environment setup
+├── start-ai-call-center.sh   # Single deployment script with all setup functions
 ├── server-standalone.js      # Main server with audio trigger
 ├── packages/                 # Core packages
 │   ├── twilio-server/       # Twilio WebSocket handling

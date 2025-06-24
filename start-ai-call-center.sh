@@ -99,9 +99,37 @@ echo ""
 echo "🔧 Checking environment configuration..."
 echo "======================================="
 
-# Setup frontend environment variables
-echo "🔧 Setting up frontend environment..."
-./setup-frontend-env.sh
+# Setup frontend environment function
+setup_frontend_env() {
+    echo "🔧 Setting up frontend environment..."
+    
+    # Create frontend directory if it doesn't exist
+    mkdir -p frontend
+    
+    # Extract Supabase credentials from root .env
+    if [ -f .env ]; then
+        SUPABASE_URL=$(grep SUPABASE_URL .env | cut -d '=' -f2)
+        SUPABASE_ANON_KEY=$(grep SUPABASE_ANON_KEY .env | cut -d '=' -f2)
+        
+        # Create frontend .env file
+        cat > frontend/.env << EOF
+VITE_SUPABASE_URL=${SUPABASE_URL}
+VITE_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+VITE_API_URL=http://localhost:12001
+EOF
+        echo "✅ Frontend .env file created successfully with Supabase credentials"
+    else
+        echo "⚠️ Root .env file not found. Creating frontend .env with default values..."
+        cat > frontend/.env << EOF
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_API_URL=http://localhost:12001
+EOF
+    fi
+}
+
+# Call the setup_frontend_env function
+setup_frontend_env
 
 if [ ! -f ".env" ]; then
     echo "⚠️ No .env file found. Creating template..."
