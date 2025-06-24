@@ -3,10 +3,13 @@ import { CloseEvent, ErrorEvent, MessageEvent, WebSocket } from 'ws';
 
 export class GeminiLiveClient {
 
-    private static readonly DEFAULT_GEMINI_BIDI_SERVER = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+    private static readonly DEFAULT_GEMINI_BIDI_SERVER = 'wss://generativelanguage.googleapis.com/v1beta/models';
 
-    private socket: WebSocket;
+    private socket!: WebSocket;
     public isReady: boolean = false;
+    private usingFallback: boolean = false;
+    private connectionAttempts: number = 0;
+    private maxRetries: number = 2;
 
     public onReady?: () => void;
     public onError?: (event: ErrorEvent) => void;
@@ -16,11 +19,17 @@ export class GeminiLiveClient {
     constructor(
         private options: GeminiLiveClientOptions
     ) {
-        const server = options.server;
+        this.connectWithModel();
+    }
+
+    private connectWithModel() {
+        const server = this.options.server;
         const baseUrl = server?.url || GeminiLiveClient.DEFAULT_GEMINI_BIDI_SERVER;
         const queryParams = server?.apiKey ? `key=${server.apiKey}` : '';
 
-        const url = `${baseUrl}?${queryParams}`;
+        // **FIX**: Correctly format the model name and construct the WebSocket URL.
+        const modelName = (this.options.setup.model || this.options.primaryModel || "").replace("models/", "");
+        const url = `${baseUrl}/${modelName}:bidiGenerateContent?${queryParams}`;
         this.socket = new WebSocket(url);
 
         this.socket.onopen = this.sendSetup.bind(this);
@@ -28,13 +37,36 @@ export class GeminiLiveClient {
 
         this.socket.onerror = (event: ErrorEvent) => {
             this.isReady = false;
-            this.onError?.(event);
+            this.handleConnectionError(event);
         };
 
         this.socket.onclose = (event: CloseEvent) => {
             this.isReady = false;
             this.onClose?.(event);
         };
+    }
+
+    private handleConnectionError(event: ErrorEvent) {
+        this.connectionAttempts++;
+        
+        // Try fallback model if primary fails and we have a fallback
+        if (!this.usingFallback && this.options.fallbackModel && this.connectionAttempts <= this.maxRetries) {
+            console.log(`Primary model failed, switching to fallback: ${this.options.fallbackModel}`);
+            this.usingFallback = true;
+            this.options.setup.model = this.options.fallbackModel;
+            
+            // Close current connection and retry with fallback
+            if (this.socket) {
+                this.socket.close();
+            }
+            
+            setTimeout(() => {
+                this.connectWithModel();
+            }, 1000);
+        } else {
+            // All attempts failed, call error handler
+            this.onError?.(event);
+        }
     }
 
     protected sendSetup() {

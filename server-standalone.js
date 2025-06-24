@@ -287,6 +287,15 @@ class Tw2GemServer extends TwilioWebSocketServer {
                 
                 // Gemini Live client connects automatically in constructor
                 console.log('🤖 Gemini Live client ready for audio');
+                
+                // **FIX**: Immediately send an empty text prompt to make Gemini speak first.
+                // This is the correct way to initiate the conversation.
+                try {
+                    console.log(`🎤 Prompting Gemini to initiate conversation for stream: ${socket.twilioStreamSid}`);
+                    socket.geminiLive.sendClientContent({ text: '' });
+                } catch (err) {
+                    console.error(`❌ Error sending initial prompt to Gemini for stream ${socket.twilioStreamSid}:`, err);
+                }
                 break;
                 
             case 'media':
@@ -353,14 +362,16 @@ const server = new Tw2GemServer({
         server: {
             apiKey: process.env.GEMINI_API_KEY,
         },
+        primaryModel: process.env.GEMINI_PRIMARY_MODEL || 'gemini-2.0-flash-live-001',
+        fallbackModel: process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash-preview-native-audio-dialog',
         setup: {
-            model: 'models/gemini-2.0-flash-live-001',
+            model: process.env.GEMINI_PRIMARY_MODEL || 'gemini-2.0-flash-live-001',
             generationConfig: {
                 responseModalities: ['AUDIO'],
                 speechConfig: {
                     voiceConfig: {
                         prebuiltVoiceConfig: {
-                            voiceName: process.env.VOICE_NAME || 'Puck'
+                            voiceName: 'Puck' // Default, will be overridden per agent
                         }
                     },
                     languageCode: process.env.LANGUAGE_CODE || 'en-US'
@@ -408,7 +419,42 @@ server.geminiLive.onReady = (socket) => {
     
     const selectedAgent = socket.selectedAgent || activeCallAgents.get(socket.twilioStreamSid);
     
-    // Send initial greeting to ensure AI speaks first
+    // CRITICAL: Send audio trigger immediately to make Gemini speak first
+    // This is required for Gemini Live API audio modality
+    if (socket.geminiLive && socket.geminiLive.readyState === 1) {
+        console.log('🎵 Sending audio trigger to initiate Gemini speech...');
+        
+        // Send the pre-converted PCM audio trigger
+        try {
+            const fs = require('fs');
+            const triggerAudio = fs.readFileSync('./assets/trigger-audio.pcm');
+            const base64Audio = triggerAudio.toString('base64');
+            
+            socket.geminiLive.sendRealtimeInput({
+                mediaChunks: [{
+                    mimeType: 'audio/pcm',
+                    data: base64Audio
+                }]
+            });
+            
+            console.log('✅ Audio trigger sent successfully');
+        } catch (error) {
+            console.error('❌ Failed to send audio trigger:', error);
+            
+            // Fallback: send a minimal audio signal
+            const silentAudio = Buffer.alloc(1600, 0); // 0.1 seconds of silence at 16kHz
+            const base64Silent = silentAudio.toString('base64');
+            
+            socket.geminiLive.sendRealtimeInput({
+                mediaChunks: [{
+                    mimeType: 'audio/pcm',
+                    data: base64Silent
+                }]
+            });
+        }
+    }
+    
+    // Send initial greeting instruction after audio trigger
     setTimeout(() => {
         if (socket.geminiLive && socket.geminiLive.readyState === 1) {
             let greetingPrompt = 'Please greet the caller now. Say hello and ask how you can help them today.';
@@ -475,21 +521,40 @@ app.post('/webhook/voice', async (req, res) => {
     
     try {
         // Route call to appropriate agent
-        const selectedAgent = await agentRouter.routeIncomingCall(req.body);
+        const routingResult = await agentRouter.routeIncomingCall(req.body);
+        const { agent: selectedAgent, routing } = routingResult;
         
         // Store agent for this call
         activeCallAgents.set(req.body.CallSid, selectedAgent);
         
-        console.log(`🎯 Routed call ${req.body.CallSid} to agent: ${selectedAgent.name} (${selectedAgent.agent_type})`);
+        console.log(`🎯 Routed call ${req.body.CallSid} to agent: ${selectedAgent.name} (${selectedAgent.agent_type}) - Action: ${routing.action}`);
         
         const twiml = new twilio.twiml.VoiceResponse();
         
-        // Start a stream to capture audio
-        const start = twiml.start();
-        start.stream({
-            url: `wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev`,
-            track: 'both_tracks'
-        });
+        // Handle different routing actions
+        switch (routing.action) {
+            case 'forward_call':
+                console.log(`📞 Forwarding call to ${routing.target}`);
+                twiml.dial(routing.target);
+                break;
+                
+            case 'play_ivr':
+                console.log('🎵 Playing IVR menu');
+                // Implement IVR logic here
+                twiml.say('Welcome to our service. Please hold while we connect you.');
+                // Fall through to connect_ai for now
+                
+            case 'connect_ai':
+            default:
+                console.log('🤖 Connecting to AI agent');
+                // Start a stream to capture audio
+                const start = twiml.start();
+                start.stream({
+                    url: `wss://work-2-bsdyxgpeckswizwe.prod-runtime.all-hands.dev`,
+                    track: 'both_tracks'
+                });
+                break;
+        }
         
         // Use agent's custom greeting or default
         const greeting = selectedAgent.greeting || 

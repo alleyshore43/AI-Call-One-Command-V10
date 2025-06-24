@@ -23,7 +23,7 @@ export default function DashboardPage() {
   const [activeCalls, setActiveCalls] = useState<CallLog[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [serverStatus, setServerStatus] = useState<'running' | 'stopped'>('stopped');
+
 
   useEffect(() => {
     if (user) {
@@ -50,8 +50,7 @@ export default function DashboardPage() {
       const analyticsData = await DatabaseService.getAnalytics(user.id);
       setAnalytics(analyticsData);
 
-      // Simulate server status based on active calls
-      setServerStatus(active.length > 0 ? 'running' : 'stopped');
+
 
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -109,17 +108,7 @@ export default function DashboardPage() {
     };
   };
 
-  const toggleServer = () => {
-    // This would typically make an API call to start/stop the server
-    const newStatus = serverStatus === 'running' ? 'stopped' : 'running';
-    setServerStatus(newStatus);
-    
-    if (newStatus === 'running') {
-      toast.success('AI server started successfully');
-    } else {
-      toast.success('AI server stopped');
-    }
-  };
+
 
   const formatDuration = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
@@ -187,19 +176,23 @@ export default function DashboardPage() {
     },
     { 
       name: 'Total Calls Today', 
-      value: analytics?.totalCalls.toString() || '0', 
+      value: (analytics?.totalCalls ?? 0).toString(), 
       icon: UserGroupIcon, 
       color: 'text-blue-500' 
     },
     { 
       name: 'Success Rate', 
-      value: analytics ? `${Math.round((analytics.successfulCalls / Math.max(analytics.totalCalls, 1)) * 100)}%` : '0%', 
+      value: analytics && analytics.totalCalls !== undefined && analytics.successfulCalls !== undefined
+        ? `${Math.round((analytics.successfulCalls / Math.max(analytics.totalCalls, 1)) * 100)}%` 
+        : '0%', 
       icon: CheckCircleIcon, 
       color: 'text-emerald-500' 
     },
     { 
       name: 'Avg Duration', 
-      value: analytics ? formatDuration(Math.round(analytics.averageCallDuration)) : '0m 0s', 
+      value: analytics && analytics.averageCallDuration !== undefined
+        ? formatDuration(Math.round(analytics.averageCallDuration)) 
+        : '0m 0s', 
       icon: ClockIcon, 
       color: 'text-purple-500' 
     },
@@ -207,43 +200,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Server Control */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">AI Server Control</h3>
-            <p className="text-slate-600">Manage your AI calling server</p>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <div className={`h-3 w-3 rounded-full ${serverStatus === 'running' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <span className="text-sm text-slate-600">
-                {serverStatus === 'running' ? 'Running' : 'Stopped'}
-              </span>
-            </div>
-            <button
-              onClick={toggleServer}
-              className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-colors ${
-                serverStatus === 'running'
-                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                  : 'bg-green-100 text-green-700 hover:bg-green-200'
-              }`}
-            >
-              {serverStatus === 'running' ? (
-                <>
-                  <StopIcon className="h-5 w-5" />
-                  <span>Stop Server</span>
-                </>
-              ) : (
-                <>
-                  <PlayIcon className="h-5 w-5" />
-                  <span>Start Server</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

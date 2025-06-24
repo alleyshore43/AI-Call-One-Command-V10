@@ -11,7 +11,7 @@ export class AgentRoutingService {
             id: 'default',
             name: 'Default AI Agent',
             agent_type: 'general',
-            voice_name: process.env.VOICE_NAME || 'Puck',
+            voice_name: 'Puck',
             language_code: process.env.LANGUAGE_CODE || 'en-US',
             system_instruction: process.env.SYSTEM_INSTRUCTION || 
                 'You are a professional AI assistant for customer service calls. IMPORTANT: You MUST speak first immediately when the call connects. Start with a warm greeting like "Hello! Thank you for calling. How can I help you today?" Be helpful, polite, and efficient. Always initiate the conversation and maintain a friendly, professional tone throughout the call.',
@@ -22,7 +22,11 @@ export class AgentRoutingService {
             timezone: 'America/New_York',
             business_hours_start: '09:00',
             business_hours_end: '17:00',
-            business_days: [1, 2, 3, 4, 5]
+            business_days: [1, 2, 3, 4, 5],
+            routing_type: 'direct', // direct, ivr, forward
+            ivr_enabled: false,
+            forward_number: null,
+            ivr_menu: null
         };
     }
 
@@ -38,14 +42,19 @@ export class AgentRoutingService {
             timezone: agent.timezone || 'America/New_York',
             business_hours_start: agent.business_hours_start || '09:00',
             business_hours_end: agent.business_hours_end || '17:00',
-            business_days: agent.business_days || [1, 2, 3, 4, 5]
+            business_days: agent.business_days || [1, 2, 3, 4, 5],
+            routing_type: agent.routing_type || 'direct',
+            ivr_enabled: agent.ivr_enabled || false,
+            forward_number: agent.forward_number || null,
+            ivr_menu: agent.ivr_menu || null,
+            voice_name: agent.voice_name || 'Puck'
         };
     }
 
     /**
      * Route incoming call to appropriate agent
      * @param {Object} callData - Twilio call data
-     * @returns {Object} Selected agent configuration
+     * @returns {Object} Selected agent configuration with routing instructions
      */
     async routeIncomingCall(callData) {
         try {
@@ -72,12 +81,65 @@ export class AgentRoutingService {
                 agent = this.defaultAgent;
             }
             
-            console.log(`✅ Selected agent: ${agent.name} (${agent.agent_type})`);
-            return agent;
+            // Enhance agent with defaults and determine routing action
+            agent = this.enhanceAgentWithDefaults(agent);
+            const routingAction = this.determineRoutingAction(agent, callData);
+            
+            console.log(`✅ Selected agent: ${agent.name} (${agent.agent_type}) - Routing: ${routingAction.type}`);
+            
+            return {
+                agent,
+                routing: routingAction
+            };
             
         } catch (error) {
             console.error('❌ Error in agent routing:', error);
-            return this.defaultAgent;
+            return {
+                agent: this.defaultAgent,
+                routing: { type: 'direct', action: 'connect_ai' }
+            };
+        }
+    }
+
+    /**
+     * Determine routing action based on agent configuration
+     * @param {Object} agent - Agent configuration
+     * @param {Object} callData - Call data
+     * @returns {Object} Routing action
+     */
+    determineRoutingAction(agent, callData) {
+        const routingType = agent.routing_type || 'direct';
+        
+        switch (routingType) {
+            case 'forward':
+                if (agent.forward_number) {
+                    return {
+                        type: 'forward',
+                        action: 'forward_call',
+                        target: agent.forward_number,
+                        message: `Forwarding call to ${agent.forward_number}`
+                    };
+                }
+                // Fall through to direct if no forward number
+                
+            case 'ivr':
+                if (agent.ivr_enabled && agent.ivr_menu) {
+                    return {
+                        type: 'ivr',
+                        action: 'play_ivr',
+                        menu: agent.ivr_menu,
+                        message: 'Playing IVR menu'
+                    };
+                }
+                // Fall through to direct if IVR not configured
+                
+            case 'direct':
+            default:
+                return {
+                    type: 'direct',
+                    action: 'connect_ai',
+                    message: 'Connecting directly to AI agent'
+                };
         }
     }
 
