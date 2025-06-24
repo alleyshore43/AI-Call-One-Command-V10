@@ -24,8 +24,8 @@ Deploy a complete AI calling system with smart agent routing, audio triggers, an
 
 ```bash
 # Clone the repository
-git clone https://github.com/rhondaallen9460/AI-Call-One-Command-V1.git
-cd AI-Call-One-Command-V1
+git clone https://github.com/primefocus83/AI-Call-One-Command-V3.git
+cd AI-Call-One-Command-V3
 
 # Start the complete AI Call Center system
 ./start-ai-call-center.sh
@@ -55,11 +55,24 @@ node test-agent-routing-simple.js
 
 ### Required Configuration
 
-Before running the deployment script, you **MUST** configure your Gemini API key:
+Before running the deployment script, you **MUST** configure your API keys:
 
-1. Edit `one-command-deploy.sh`
-2. Find line with `GEMINI_API_KEY=your_gemini_api_key_here`
-3. Replace `your_gemini_api_key_here` with your actual Gemini API key
+1. Create a `.env` file in the root directory with the following:
+```
+# Gemini AI Configuration
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Supabase Configuration (if using Supabase)
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Twilio Configuration (if using Twilio)
+TWILIO_ACCOUNT_SID=your_twilio_account_sid
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+TWILIO_PHONE_NUMBER=your_twilio_phone_number
+```
+
+The script will automatically configure the frontend environment based on these settings.
 
 ### Optional Configuration
 
@@ -78,18 +91,19 @@ For production use, you can also configure:
 ## 📁 Project Structure
 
 ```
-AI-Call-One-Command/
-├── one-command-deploy.sh     # Single deployment script
+AI-Call-One-Command-V3/
+├── start-ai-call-center.sh   # Single deployment script
+├── setup-frontend-env.sh     # Frontend environment setup
 ├── server-standalone.js      # Main server with audio trigger
 ├── packages/                 # Core packages
 │   ├── twilio-server/       # Twilio WebSocket handling
 │   ├── gemini-live-client/  # Gemini Live API client
 │   ├── audio-converter/     # Audio processing utilities
-│   └── tw2gem-server/       # Server integration
+│   └── examples/            # Example implementations
 ├── frontend/                # React dashboard
 ├── utils/                   # Audio trigger system
 ├── assets/                  # Audio files (PCM trigger)
-└── ecosystem.config.js      # PM2 configuration (auto-generated)
+└── ecosystem.config.js      # PM2 configuration
 ```
 
 ## 🎵 Audio Trigger System
@@ -194,4 +208,4 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Ready to deploy your AI Call Center? Configure your API key and run `./one-command-deploy.sh`!** 🚀
+**Ready to deploy your AI Call Center? Configure your API keys and run `./start-ai-call-center.sh`!** 🚀

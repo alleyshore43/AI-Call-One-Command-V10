@@ -10,6 +10,18 @@ export default defineConfig({
     cors: true,
     open: false,
     allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:12001',
+        changeOrigin: true,
+        secure: false
+      },
+      '/webhook': {
+        target: 'http://localhost:12001',
+        changeOrigin: true,
+        secure: false
+      }
+    },
     headers: {
       'X-Frame-Options': 'ALLOWALL',
       'Access-Control-Allow-Origin': '*',
@@ -22,6 +34,18 @@ export default defineConfig({
     port: 12000,
     cors: true,
     allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:12001',
+        changeOrigin: true,
+        secure: false
+      },
+      '/webhook': {
+        target: 'http://localhost:12001',
+        changeOrigin: true,
+        secure: false
+      }
+    },
     headers: {
       'X-Frame-Options': 'ALLOWALL',
       'Access-Control-Allow-Origin': '*',
