@@ -9,29 +9,41 @@ Deploy a complete AI calling system with smart agent routing, audio triggers, an
 - 🎯 **One-Command Deployment** - Clone and deploy with a single script
 - 🤖 **Gemini Live API Integration** - Real-time audio conversations
 - 🎵 **Audio Trigger System** - Gemini speaks first on inbound calls
-- 🔀 **Smart Agent Routing** - Inbound/outbound call direction support
+- 🔀 **Intelligent Agent Routing** - Route calls to specialized AI agents
+- 👥 **Multiple AI Agents** - Customer service, sales, support, and custom agents
+- 🗣️ **8 Unique Voices** - Diverse AI personalities with different voices
+- 🌍 **Multi-language Support** - 10+ languages with localized agents
+- 🕐 **Business Hours Routing** - Time-aware call routing with after-hours support
 - 📞 **Twilio Integration** - Production-ready phone system
 - 🔗 **Zapier Integration** - Webhook automation for CRM/workflows
 - 🎛️ **Agent Management** - Web-based configuration interface
 - 📊 **Real-time Dashboard** - Call monitoring and analytics
+- 🧪 **Testing Suite** - Comprehensive routing and functionality tests
 
 ## 🚀 Quick Start
 
 ```bash
 # Clone the repository
-git clone https://github.com/tylerrue2012/AI-Call-One-Command.git
-cd AI-Call-One-Command
+git clone https://github.com/rhondaallen9460/AI-Call-One-Command-V1.git
+cd AI-Call-One-Command-V1
 
-# Configure your Gemini API key
-# Edit one-command-deploy.sh and replace 'your_gemini_api_key_here' with your actual API key
-
-# Deploy everything with one command
-./one-command-deploy.sh
+# Start the complete AI Call Center system
+./start-ai-call-center.sh
 ```
 
 That's it! Your AI Call Center will be running at:
 - **Frontend**: http://localhost:12000
 - **Backend**: http://localhost:12001
+- **Health Check**: http://localhost:12001/health
+
+### Test the Agent Routing System
+```bash
+# Run interactive demo
+node demo-agent-routing.js
+
+# Run comprehensive tests
+node test-agent-routing-simple.js
+```
 
 ## 📋 Prerequisites
 
