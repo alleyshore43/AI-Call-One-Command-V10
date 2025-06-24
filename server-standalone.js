@@ -272,31 +272,65 @@ const server = new Tw2GemServer({
 server.onNewCall = (socket) => {
     console.log('📞 New call from Twilio:', socket.twilioStreamSid);
     console.log('🕐 Call started at:', new Date().toISOString());
+    
+    // Get the selected agent for this call
+    const selectedAgent = activeCallAgents.get(socket.twilioStreamSid);
+    if (selectedAgent) {
+        console.log(`🎯 Call ${socket.twilioStreamSid} assigned to agent: ${selectedAgent.name} (${selectedAgent.agent_type})`);
+        
+        // Store agent info on socket for later use
+        socket.selectedAgent = selectedAgent;
+        
+        // Update Gemini configuration for this specific call
+        if (socket.geminiLive && socket.geminiLive.setup) {
+            // Update voice and language
+            socket.geminiLive.setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName = selectedAgent.voice_name || 'Puck';
+            socket.geminiLive.setup.generationConfig.speechConfig.languageCode = selectedAgent.language_code || 'en-US';
+            
+            // Update system instruction
+            socket.geminiLive.setup.systemInstruction.parts[0].text = selectedAgent.system_instruction || 
+                'You are a professional AI assistant for customer service calls. IMPORTANT: You MUST speak first immediately when the call connects. Start with a warm greeting like "Hello! Thank you for calling. How can I help you today?" Be helpful, polite, and efficient. Always initiate the conversation and maintain a friendly, professional tone throughout the call.';
+        }
+    }
 };
 
 server.geminiLive.onReady = (socket) => {
     console.log('🤖 Gemini Live connection ready for call:', socket.twilioStreamSid);
     
+    const selectedAgent = socket.selectedAgent || activeCallAgents.get(socket.twilioStreamSid);
+    
     // Send initial greeting to ensure AI speaks first
     setTimeout(() => {
         if (socket.geminiLive && socket.geminiLive.readyState === 1) {
+            let greetingPrompt = 'Please greet the caller now. Say hello and ask how you can help them today.';
+            
+            if (selectedAgent) {
+                greetingPrompt = `You are ${selectedAgent.name}, a ${selectedAgent.agent_type} AI assistant. ${selectedAgent.greeting || 'Please greet the caller warmly and ask how you can help them today.'}`;
+            }
+            
             const initialMessage = {
                 client_content: {
                     turns: [{
                         role: 'user',
-                        parts: [{ text: 'Please greet the caller now. Say hello and ask how you can help them today.' }]
+                        parts: [{ text: greetingPrompt }]
                     }],
                     turn_complete: true
                 }
             };
             socket.geminiLive.send(JSON.stringify(initialMessage));
-            console.log('👋 Sent initial greeting prompt to Gemini for call:', socket.twilioStreamSid);
+            console.log(`👋 Sent personalized greeting prompt to Gemini for agent: ${selectedAgent?.name || 'default'}`);
         }
     }, 500);
 };
 
 server.geminiLive.onClose = (socket) => {
     console.log('🔌 Gemini Live connection closed for call:', socket.twilioStreamSid);
+    
+    // Clean up agent mapping
+    if (socket.twilioStreamSid) {
+        activeCallAgents.delete(socket.twilioStreamSid);
+        console.log(`🧹 Cleaned up agent mapping for call: ${socket.twilioStreamSid}`);
+    }
 };
 
 server.onError = (socket, event) => {
@@ -306,40 +340,94 @@ server.onError = (socket, event) => {
 server.onClose = (socket, event) => {
     console.log('📴 Call ended:', socket.twilioStreamSid);
     console.log('🕐 Call ended at:', new Date().toISOString());
+    
+    // Clean up agent mapping
+    if (socket.twilioStreamSid) {
+        activeCallAgents.delete(socket.twilioStreamSid);
+        console.log(`🧹 Cleaned up agent mapping for call: ${socket.twilioStreamSid}`);
+    }
 };
 
 // Import Twilio for webhook responses
 import twilio from 'twilio';
 import { createServer as createHttpServer } from 'http';
+import { AgentRoutingService } from './agent-routing-service.js';
 
 const WEBHOOK_URL = `https://work-2-ipscjteepreyjhti.prod-runtime.all-hands.dev`;
 
+// Initialize agent routing service
+const agentRouter = new AgentRoutingService();
+
+// Store active call agents for WebSocket routing
+const activeCallAgents = new Map();
+
 // Twilio webhook for incoming calls
-app.post('/webhook/voice', (req, res) => {
+app.post('/webhook/voice', async (req, res) => {
     console.log('📞 Incoming call webhook:', req.body);
     
-    const twiml = new twilio.twiml.VoiceResponse();
-    
-    // Start a stream to capture audio
-    const start = twiml.start();
-    start.stream({
-        url: `wss://work-2-ipscjteepreyjhti.prod-runtime.all-hands.dev`,
-        track: 'both_tracks'
-    });
-    
-    // Say hello and start conversation
-    twiml.say({
-        voice: 'alice',
-        language: 'en-US'
-    }, 'Hello! I am your AI assistant. How can I help you today?');
-    
-    // Keep the call alive
-    twiml.pause({ length: 60 });
-    
-    res.type('text/xml');
-    res.send(twiml.toString());
-    
-    console.log('📞 TwiML response sent:', twiml.toString());
+    try {
+        // Route call to appropriate agent
+        const selectedAgent = await agentRouter.routeIncomingCall(req.body);
+        
+        // Store agent for this call
+        activeCallAgents.set(req.body.CallSid, selectedAgent);
+        
+        console.log(`🎯 Routed call ${req.body.CallSid} to agent: ${selectedAgent.name} (${selectedAgent.agent_type})`);
+        
+        const twiml = new twilio.twiml.VoiceResponse();
+        
+        // Start a stream to capture audio
+        const start = twiml.start();
+        start.stream({
+            url: `wss://work-2-ipscjteepreyjhti.prod-runtime.all-hands.dev`,
+            track: 'both_tracks'
+        });
+        
+        // Use agent's custom greeting or default
+        const greeting = selectedAgent.greeting || 
+                        `Hello! Thank you for calling. I'm ${selectedAgent.name}, your ${selectedAgent.agent_type} assistant. How can I help you today?`;
+        
+        twiml.say({
+            voice: 'alice',
+            language: selectedAgent.language_code || 'en-US'
+        }, greeting);
+        
+        // Keep the call alive
+        twiml.pause({ length: 60 });
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+        
+        console.log('📞 TwiML response sent with agent routing');
+        
+        // Log the routing decision
+        await agentRouter.logCallRouting(
+            req.body.CallSid, 
+            selectedAgent.id, 
+            'webhook_routing'
+        );
+        
+    } catch (error) {
+        console.error('❌ Error in webhook routing:', error);
+        
+        // Fallback to default response
+        const twiml = new twilio.twiml.VoiceResponse();
+        const start = twiml.start();
+        start.stream({
+            url: `wss://work-2-ipscjteepreyjhti.prod-runtime.all-hands.dev`,
+            track: 'both_tracks'
+        });
+        
+        twiml.say({
+            voice: 'alice',
+            language: 'en-US'
+        }, 'Hello! I am your AI assistant. How can I help you today?');
+        
+        twiml.pause({ length: 60 });
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+    }
 });
 
 // Twilio webhook for call status
@@ -526,6 +614,58 @@ app.get('/test/system', async (req, res) => {
         webhook_url_for_twilio: `${WEBHOOK_URL}/webhook/voice`,
         ...results
     });
+});
+
+// Agent management endpoints
+app.get('/api/agents/active', async (req, res) => {
+    try {
+        const stats = await agentRouter.getRoutingStats();
+        const activeAgents = Array.from(activeCallAgents.values());
+        
+        res.json({
+            active_calls: activeCallAgents.size,
+            active_agents: activeAgents,
+            routing_stats: stats
+        });
+    } catch (error) {
+        console.error('Error getting active agents:', error);
+        res.status(500).json({ error: 'Failed to get active agents' });
+    }
+});
+
+app.post('/api/agents/route-test', async (req, res) => {
+    try {
+        const { callData, agentType } = req.body;
+        
+        let agent;
+        if (agentType) {
+            agent = await agentRouter.getAgentByType(agentType, 'inbound');
+        } else {
+            agent = await agentRouter.routeIncomingCall(callData || {
+                From: '+15551234567',
+                To: '+18186006909',
+                CallSid: 'test-call-' + Date.now()
+            });
+        }
+        
+        res.json({
+            selected_agent: agent,
+            routing_reason: agentType ? `agent_type_${agentType}` : 'automatic_routing'
+        });
+    } catch (error) {
+        console.error('Error in route test:', error);
+        res.status(500).json({ error: 'Failed to test routing' });
+    }
+});
+
+app.get('/api/agents/routing-stats', async (req, res) => {
+    try {
+        const stats = await agentRouter.getRoutingStats();
+        res.json(stats);
+    } catch (error) {
+        console.error('Error getting routing stats:', error);
+        res.status(500).json({ error: 'Failed to get routing stats' });
+    }
 });
 
 // Health check endpoint
