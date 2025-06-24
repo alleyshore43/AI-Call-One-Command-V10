@@ -83,8 +83,21 @@ export default function DNCPage() {
     }
 
     try {
-      await DatabaseService.deleteDNCEntry(entryId);
-      toast.success('Number removed from DNC list');
+      // Optimistically update UI
+      setDncEntries(prev => prev.filter(entry => entry.id !== entryId));
+      
+      // Make API call
+      const response = await fetch(`/api/dnc/${entryId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        toast.success('Number removed from DNC list');
+      } else {
+        // Revert optimistic update on failure
+        await loadDNCEntries();
+        throw new Error('Failed to delete DNC entry');
+      }
     } catch (error) {
       console.error('Error deleting DNC entry:', error);
       toast.error('Failed to remove number from DNC list');

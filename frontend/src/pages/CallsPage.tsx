@@ -26,6 +26,8 @@ export default function CallsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCall, setSelectedCall] = useState<CallLog | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [showRecordingPlayer, setShowRecordingPlayer] = useState(false);
+  const [currentRecording, setCurrentRecording] = useState<CallLog | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCalls, setTotalCalls] = useState(0);
   const callsPerPage = 20;
@@ -137,6 +139,33 @@ export default function CallsPage() {
   const handleViewTranscript = (call: CallLog) => {
     setSelectedCall(call);
     setShowTranscript(true);
+  };
+
+  const handlePlayRecording = (call: CallLog) => {
+    setCurrentRecording(call);
+    setShowRecordingPlayer(true);
+  };
+
+  const handleDownloadRecording = async (call: CallLog) => {
+    if (!call.recording_url) {
+      toast.error('No recording available for this call');
+      return;
+    }
+
+    try {
+      // Create a temporary link to download the recording
+      const link = document.createElement('a');
+      link.href = call.recording_url;
+      link.download = `call-recording-${call.id}-${new Date(call.created_at).toISOString().split('T')[0]}.mp3`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success('Recording download started');
+    } catch (error) {
+      console.error('Error downloading recording:', error);
+      toast.error('Failed to download recording');
+    }
   };
 
 
@@ -329,9 +358,22 @@ export default function CallsPage() {
                         </button>
                       )}
                       {call.recording_url && (
-                        <button className="text-green-600 hover:text-green-900">
-                          <PlayIcon className="h-4 w-4" />
-                        </button>
+                        <>
+                          <button 
+                            onClick={() => handlePlayRecording(call)}
+                            className="text-green-600 hover:text-green-900"
+                            title="Play recording"
+                          >
+                            <PlayIcon className="h-4 w-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDownloadRecording(call)}
+                            className="text-purple-600 hover:text-purple-900"
+                            title="Download recording"
+                          >
+                            <ArrowDownTrayIcon className="h-4 w-4" />
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>
@@ -469,6 +511,105 @@ export default function CallsPage() {
                     </>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recording Player Modal */}
+      {showRecordingPlayer && currentRecording && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Call Recording - {currentRecording.phone_number_from}
+                </h3>
+                <button
+                  onClick={() => setShowRecordingPlayer(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium">Duration:</span> {formatDuration(currentRecording.duration_seconds)}
+                  </div>
+                  <div>
+                    <span className="font-medium">Started:</span> {new Date(currentRecording.started_at).toLocaleString()}
+                  </div>
+                  <div>
+                    <span className="font-medium">Direction:</span> {currentRecording.direction}
+                  </div>
+                  <div>
+                    <span className="font-medium">Status:</span> {currentRecording.status}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-white p-4 border rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">Audio Player:</h4>
+                  {currentRecording.recording_url ? (
+                    <div className="space-y-3">
+                      <audio 
+                        controls 
+                        className="w-full"
+                        preload="metadata"
+                      >
+                        <source src={currentRecording.recording_url} type="audio/mpeg" />
+                        <source src={currentRecording.recording_url} type="audio/wav" />
+                        <source src={currentRecording.recording_url} type="audio/mp3" />
+                        Your browser does not support the audio element.
+                      </audio>
+                      
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleDownloadRecording(currentRecording)}
+                          className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        >
+                          <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                          Download Recording
+                        </button>
+                        
+                        <a
+                          href={currentRecording.recording_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        >
+                          Open in New Tab
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500 text-center py-4">
+                      No recording available for this call.
+                    </div>
+                  )}
+                </div>
+
+                {currentRecording.call_summary && (
+                  <div className="bg-blue-50 p-4 border border-blue-200 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Call Summary:</h4>
+                    <div className="text-sm text-gray-700">
+                      {currentRecording.call_summary}
+                    </div>
+                  </div>
+                )}
+
+                {currentRecording.outcome && (
+                  <div className="bg-green-50 p-4 border border-green-200 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Call Outcome:</h4>
+                    <div className="text-sm text-gray-700">
+                      {currentRecording.outcome}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

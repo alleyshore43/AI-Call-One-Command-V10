@@ -40,6 +40,7 @@ const navigation = [
 ];
 
 const adminNavigation = [
+  { name: 'Admin Dashboard', href: '/admin/dashboard', icon: ChartBarIcon },
   { name: 'User Management', href: '/admin/users', icon: UsersIcon },
 ];
 

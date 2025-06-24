@@ -10,13 +10,16 @@ import {
   XCircleIcon,
   ArrowPathIcon,
   LinkIcon,
-  BoltIcon
+  BoltIcon,
+  CogIcon
 } from '@heroicons/react/24/outline';
 import { useUser } from '../contexts/UserContext';
 import { DatabaseService } from '../services/database';
 import { RealtimeService } from '../services/realtime';
 import type { WebhookEndpoint, WebhookDelivery } from '../lib/supabase';
 import toast from 'react-hot-toast';
+import ZapierIntegration from '../components/ZapierIntegration';
+import GoHighLevelIntegration from '../components/GoHighLevelIntegration';
 
 const WEBHOOK_EVENTS = [
   { value: 'call.started', label: 'Call Started', description: 'When a call begins' },
@@ -66,7 +69,7 @@ export default function WebhooksPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedWebhook, setSelectedWebhook] = useState<WebhookEndpoint | null>(null);
-  const [activeTab, setActiveTab] = useState<'webhooks' | 'deliveries' | 'marketplace'>('webhooks');
+  const [activeTab, setActiveTab] = useState<'webhooks' | 'deliveries' | 'marketplace' | 'zapier' | 'ghl'>('webhooks');
 
   useEffect(() => {
     if (user) {
@@ -234,6 +237,28 @@ export default function WebhooksPage() {
           >
             <BoltIcon className="h-5 w-5 inline mr-2" />
             Zapier Templates
+          </button>
+          <button
+            onClick={() => setActiveTab('zapier')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'zapier'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <CogIcon className="h-5 w-5 inline mr-2" />
+            Zapier Integration
+          </button>
+          <button
+            onClick={() => setActiveTab('ghl')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'ghl'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <CogIcon className="h-5 w-5 inline mr-2" />
+            Go High Level
           </button>
         </nav>
       </div>
@@ -505,6 +530,16 @@ export default function WebhooksPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Zapier Integration Tab */}
+      {activeTab === 'zapier' && (
+        <ZapierIntegration />
+      )}
+
+      {/* Go High Level Integration Tab */}
+      {activeTab === 'ghl' && (
+        <GoHighLevelIntegration />
       )}
 
       {/* Create Webhook Modal */}
