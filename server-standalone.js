@@ -1,6 +1,103 @@
 import { TwilioWebSocketServer } from './packages/twilio-server/dist/index.js';
 import { GeminiLiveClient } from './packages/gemini-live-client/dist/index.js';
-import { AudioConverter } from './packages/audio-converter/dist/index.js';
+// Create a simple AudioConverter class directly in this file
+class AudioConverter {
+    static base64ToUint8Array(base64) {
+        const binary = Buffer.from(base64, 'base64');
+        return new Uint8Array(binary);
+    }
+    
+    static base64ToInt16Array(base64) {
+        const buffer = Buffer.from(base64, 'base64');
+        return new Int16Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 2);
+    }
+    
+    static muLawToPCM(muLawSample) {
+        const BIAS = 0x84;
+        muLawSample = ~muLawSample;
+        
+        const sign = muLawSample & 0x80;
+        const exponent = (muLawSample >> 4) & 0x07;
+        const mantissa = muLawSample & 0x0F;
+        
+        let sample = ((mantissa << 3) + BIAS) << exponent;
+        if (sign !== 0) sample = -sample;
+        
+        return sample;
+    }
+    
+    static pcmToMuLaw(sample) {
+        const BIAS = 0x84;
+        const CLIP = 32635;
+        
+        const sign = (sample >> 8) & 0x80;
+        if (sign !== 0) sample = -sample;
+        if (sample > CLIP) sample = CLIP;
+        
+        sample += BIAS;
+        
+        let exponent = 7;
+        for (let expMask = 0x4000; (sample & expMask) === 0 && exponent > 0; expMask >>= 1) {
+            exponent--;
+        }
+        
+        const mantissa = (sample >> (exponent + 3)) & 0x0F;
+        const muLawByte = ~(sign | (exponent << 4) | mantissa);
+        
+        return muLawByte & 0xFF;
+    }
+    
+    static convertBase64MuLawToBase64PCM16k(base64) {
+        try {
+            const muLawBytes = this.base64ToUint8Array(base64);
+            const pcm8000 = new Int16Array(muLawBytes.length);
+            
+            for (let i = 0; i < muLawBytes.length; i++) {
+                pcm8000[i] = this.muLawToPCM(muLawBytes[i]);
+            }
+            
+            const pcm16000 = new Int16Array(pcm8000.length * 2);
+            for (let i = 0; i < pcm8000.length; i++) {
+                const sample = pcm8000[i];
+                pcm16000[2 * i] = sample;
+                pcm16000[2 * i + 1] = sample;
+            }
+            
+            const buffer = Buffer.from(pcm16000.buffer);
+            return buffer.toString('base64');
+        } catch (error) {
+            console.error('Error converting mulaw to PCM:', error);
+            return base64; // Return original as fallback
+        }
+    }
+    
+    static convertBase64PCM24kToBase64MuLaw8k(base64) {
+        try {
+            const pcm24k = this.base64ToInt16Array(base64);
+            
+            const samples8k = Math.floor(pcm24k.length / 3);
+            const interpolated = new Int16Array(samples8k);
+            
+            for (let i = 0; i < samples8k; i++) {
+                const a = pcm24k[i * 3];
+                const b = pcm24k[i * 3 + 1] ?? a;
+                const c = pcm24k[i * 3 + 2] ?? b;
+                
+                interpolated[i] = Math.round((a + b + c) / 3);
+            }
+            
+            const muLaw = new Uint8Array(samples8k);
+            for (let i = 0; i < samples8k; i++) {
+                muLaw[i] = this.pcmToMuLaw(interpolated[i]);
+            }
+            
+            return Buffer.from(muLaw).toString('base64');
+        } catch (error) {
+            console.error('Error converting PCM to mulaw:', error);
+            return base64; // Return original as fallback
+        }
+    }
+}
 import { AudioTrigger } from './utils/audio-trigger.js';
 import { createServer as createHttpServer } from 'http';
 import { createClient } from '@supabase/supabase-js';
@@ -364,7 +461,7 @@ server.onClose = (socket, event) => {
 import twilio from 'twilio';
 import { AgentRoutingService } from './agent-routing-service.js';
 
-const WEBHOOK_URL = `https://work-2-ipscjteepreyjhti.prod-runtime.all-hands.dev`;
+const WEBHOOK_URL = `https://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev`;
 
 // Initialize agent routing service
 const agentRouter = new AgentRoutingService();
@@ -390,7 +487,7 @@ app.post('/webhook/voice', async (req, res) => {
         // Start a stream to capture audio
         const start = twiml.start();
         start.stream({
-            url: `wss://work-2-ipscjteepreyjhti.prod-runtime.all-hands.dev`,
+            url: `wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev`,
             track: 'both_tracks'
         });
         
@@ -425,7 +522,7 @@ app.post('/webhook/voice', async (req, res) => {
         const twiml = new twilio.twiml.VoiceResponse();
         const start = twiml.start();
         start.stream({
-            url: `wss://work-2-ipscjteepreyjhti.prod-runtime.all-hands.dev`,
+            url: `wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev`,
             track: 'both_tracks'
         });
         
@@ -466,7 +563,7 @@ app.get('/test/twilio', async (req, res) => {
                 account_sid: account.sid,
                 account_status: account.status,
                 webhook_url: `${WEBHOOK_URL}/webhook/voice`,
-                stream_url: `wss://work-2-ipscjteepreyjhti.prod-runtime.all-hands.dev:${PORT}`
+                stream_url: `wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev`
             }
         });
     } catch (error) {
@@ -552,7 +649,7 @@ app.get('/test/system', async (req, res) => {
                 status: 'pass',
                 account_status: account.status,
                 webhook_url: `${WEBHOOK_URL}/webhook/voice`,
-                stream_url: `wss://work-2-ipscjteepreyjhti.prod-runtime.all-hands.dev:${PORT}`
+                stream_url: `wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev`
             };
         } else {
             results.tests.twilio = {
@@ -606,7 +703,7 @@ app.get('/test/system', async (req, res) => {
         results.tests.websocket = {
             status: 'pass',
             port: PORT,
-            url: `wss://work-2-ipscjteepreyjhti.prod-runtime.all-hands.dev:${PORT}`,
+            url: `wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev:${PORT}`,
             message: 'Ready for Twilio streams'
         };
     } catch (error) {
@@ -1386,7 +1483,7 @@ httpServer.listen(PORT, '0.0.0.0', () => {
     console.log('🚀 Starting AI Calling Backend Server...');
     console.log(`📞 TW2GEM Server running on port ${PORT}`);
     console.log(`🔗 Twilio webhook URL: ${WEBHOOK_URL}/webhook/voice`);
-    console.log(`🎵 Twilio stream URL: wss://work-2-ipscjteepreyjhti.prod-runtime.all-hands.dev:${PORT}`);
+    console.log(`🎵 Twilio stream URL: wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev`);
     console.log(`🤖 Gemini API: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
     console.log(`🏥 Health check: ${WEBHOOK_URL}/health`);
     console.log(`🧪 System tests: ${WEBHOOK_URL}/test/system`);
