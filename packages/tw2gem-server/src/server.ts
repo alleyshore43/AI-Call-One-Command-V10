@@ -1,5 +1,6 @@
 import { TwilioMediaEvent, TwilioServerOptions, TwilioWebSocketServer } from '@tw2gem/twilio-server';
-import { BidiGenerateContentServerContent, GeminiLiveClient } from '@tw2gem/gemini-live-client';
+import { BidiGenerateContentServerContent } from '@tw2gem/gemini-live-client';
+import { GeminiLiveClient } from './gemini-live-client';
 import { Tw2GemGeminiEvents, Tw2GemServerOptions, Tw2GemSocket } from './server.dto.js';
 import { AudioConverter } from '@tw2gem/audio-converter';
 import { WebhookService } from './webhook-service.js';

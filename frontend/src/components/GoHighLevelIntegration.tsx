@@ -12,6 +12,12 @@ interface GHLSettings {
   is_active: boolean;
 }
 
+interface GHLConnectionStatus {
+  connected: boolean;
+  integration_id: string | null;
+  created_at: string | null;
+}
+
 export default function GoHighLevelIntegration() {
   const { user } = useAuth();
   const [settings, setSettings] = useState<GHLSettings>({
@@ -23,13 +29,20 @@ export default function GoHighLevelIntegration() {
     sync_appointments: true,
     is_active: false
   });
+  const [connectionStatus, setConnectionStatus] = useState<GHLConnectionStatus>({
+    connected: false,
+    integration_id: null,
+    created_at: null
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
     if (user) {
       loadSettings();
+      checkConnectionStatus();
     }
   }, [user]);
 
@@ -48,11 +61,33 @@ export default function GoHighLevelIntegration() {
       setLoading(false);
     }
   };
+  
+  const checkConnectionStatus = async () => {
+    try {
+      const response = await fetch(`/api/integrations/ghl?user_id=${user?.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setConnectionStatus(data);
+        
+        // If connected, update the is_active flag
+        if (data.connected) {
+          setSettings(prev => ({
+            ...prev,
+            is_active: true
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error checking GHL connection status:', error);
+    }
+  };
 
   const handleSave = async () => {
     try {
       setSaving(true);
-      const response = await fetch('/api/ghl/settings', {
+      
+      // First save the settings
+      const settingsResponse = await fetch('/api/ghl/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -63,16 +98,40 @@ export default function GoHighLevelIntegration() {
         })
       });
 
-      if (response.ok) {
-        const updatedSettings = await response.json();
-        setSettings(updatedSettings);
-        toast.success('Go High Level settings saved successfully');
-      } else {
+      if (!settingsResponse.ok) {
         throw new Error('Failed to save settings');
       }
+      
+      // Then save the integration
+      const integrationResponse = await fetch('/api/integrations/ghl', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: user?.id,
+          api_key: settings.api_key,
+          location_id: settings.location_id
+        })
+      });
+      
+      if (!integrationResponse.ok) {
+        throw new Error('Failed to save integration');
+      }
+      
+      const connectionData = await integrationResponse.json();
+      setConnectionStatus(connectionData);
+      
+      // Update settings with active status
+      setSettings(prev => ({
+        ...prev,
+        is_active: true
+      }));
+      
+      toast.success('Go High Level integration connected successfully');
     } catch (error) {
-      console.error('Error saving GHL settings:', error);
-      toast.error('Failed to save Go High Level settings');
+      console.error('Error saving GHL integration:', error);
+      toast.error('Failed to save Go High Level integration');
     } finally {
       setSaving(false);
     }
@@ -104,6 +163,41 @@ export default function GoHighLevelIntegration() {
       toast.error('❌ Error testing connection to Go High Level');
     } finally {
       setTesting(false);
+    }
+  };
+  
+  const handleDisconnect = async () => {
+    if (!connectionStatus.connected) {
+      return;
+    }
+    
+    try {
+      setDisconnecting(true);
+      const response = await fetch(`/api/integrations/ghl?user_id=${user?.id}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        setConnectionStatus({
+          connected: false,
+          integration_id: null,
+          created_at: null
+        });
+        
+        setSettings(prev => ({
+          ...prev,
+          is_active: false
+        }));
+        
+        toast.success('Go High Level integration disconnected successfully');
+      } else {
+        throw new Error('Failed to disconnect integration');
+      }
+    } catch (error) {
+      console.error('Error disconnecting GHL integration:', error);
+      toast.error('Failed to disconnect Go High Level integration');
+    } finally {
+      setDisconnecting(false);
     }
   };
 
@@ -300,14 +394,36 @@ export default function GoHighLevelIntegration() {
         </div>
       </div>
 
+      {/* Connection Status */}
+      {connectionStatus.connected && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+            <h3 className="font-semibold text-green-800">Connected to Go High Level</h3>
+          </div>
+          <p className="text-sm text-green-700 mt-1">
+            Connected since {new Date(connectionStatus.created_at || '').toLocaleString()}
+          </p>
+          <div className="mt-3">
+            <button
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              className="text-red-600 border border-red-300 px-3 py-1 rounded text-sm hover:bg-red-50 disabled:opacity-50"
+            >
+              {disconnecting ? 'Disconnecting...' : 'Disconnect Integration'}
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Save Button */}
       <div className="flex justify-end">
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || connectionStatus.connected}
           className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 disabled:opacity-50"
         >
-          {saving ? 'Saving...' : 'Save Integration Settings'}
+          {saving ? 'Saving...' : connectionStatus.connected ? 'Already Connected' : 'Connect to Go High Level'}
         </button>
       </div>
 
