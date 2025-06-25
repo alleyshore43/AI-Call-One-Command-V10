@@ -1,4 +1,5 @@
-import { supabase } from '../lib/supabase';
+// API base URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://work-2-xztkqihbepsagxrs.prod-runtime.all-hands.dev';
 
 export interface DNCEntry {
   id: string
@@ -106,17 +107,19 @@ export class ComplianceService {
   // Add phone number to DNC list
   static async addToDNC(entry: Omit<DNCEntry, 'id' | 'created_at'>): Promise<DNCEntry | null> {
     try {
-      const { data, error } = await supabase
-        .from('dnc_lists')
-        .insert(entry)
-        .select()
-        .single();
+      const response = await fetch(`${API_BASE_URL}/api/dnc/entries`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(entry)
+      });
 
-      if (error) {
-        console.error('Error adding to DNC list:', error);
-        return null;
+      if (!response.ok) {
+        throw new Error('Failed to add to DNC list');
       }
 
+      const data = await response.json();
       return data;
     } catch (error) {
       console.error('Error adding to DNC list:', error);
@@ -127,13 +130,18 @@ export class ComplianceService {
   // Remove phone number from DNC list
   static async removeFromDNC(profileId: string, phoneNumber: string): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('dnc_lists')
-        .delete()
-        .eq('profile_id', profileId)
-        .eq('phone_number', phoneNumber);
+      const response = await fetch(`${API_BASE_URL}/api/dnc/entries`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          profile_id: profileId,
+          phone_number: phoneNumber
+        })
+      });
 
-      return !error;
+      return response.ok;
     } catch (error) {
       console.error('Error removing from DNC list:', error);
       return false;
@@ -143,18 +151,18 @@ export class ComplianceService {
   // Get DNC list
   static async getDNCList(profileId: string, limit = 100, offset = 0): Promise<DNCEntry[]> {
     try {
-      const { data, error } = await supabase
-        .from('dnc_lists')
-        .select('*')
-        .eq('profile_id', profileId)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+      const response = await fetch(`${API_BASE_URL}/api/dnc/entries?profile_id=${profileId}&limit=${limit}&offset=${offset}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
 
-      if (error) {
-        console.error('Error fetching DNC list:', error);
-        return [];
+      if (!response.ok) {
+        throw new Error('Failed to fetch DNC list');
       }
 
+      const data = await response.json();
       return data || [];
     } catch (error) {
       console.error('Error fetching DNC list:', error);

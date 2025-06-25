@@ -1,6 +1,52 @@
 import type { CallLog, Campaign, Appointment, DNCEntry } from '../lib/supabase';
 
+// API base URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://work-2-xztkqihbepsagxrs.prod-runtime.all-hands.dev';
+
 export class ExportService {
+  
+  // Export data from API
+  static async exportData(type: 'calls' | 'campaigns', format: 'csv' | 'json' = 'csv', filters?: any): Promise<void> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/export/${type}?format=${format}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(filters || {})
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to export ${type}`);
+      }
+
+      // Handle file download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Get filename from response headers or generate one
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = `${type}-export-${new Date().toISOString().split('T')[0]}.${format}`;
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(`Error exporting ${type}:`, error);
+      throw error;
+    }
+  }
   static exportCallsToCSV(calls: CallLog[], filename?: string) {
     const headers = [
       'Date',

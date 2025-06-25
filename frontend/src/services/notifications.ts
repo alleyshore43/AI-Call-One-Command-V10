@@ -1,4 +1,5 @@
-import { supabase } from '../lib/supabase';
+// API base URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://work-2-xztkqihbepsagxrs.prod-runtime.all-hands.dev';
 
 export interface EmailNotification {
   to: string
@@ -14,7 +15,81 @@ export interface WebhookPayload {
   user_id: string
 }
 
+export interface Notification {
+  id: string
+  profile_id: string
+  title: string
+  message: string
+  type: 'info' | 'success' | 'warning' | 'error'
+  is_read: boolean
+  action_url?: string
+  created_at: string
+}
+
 export class NotificationService {
+  
+  // Get notifications for user
+  static async getNotifications(profileId: string, limit = 50, offset = 0): Promise<Notification[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/notifications?profile_id=${profileId}&limit=${limit}&offset=${offset}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch notifications');
+      }
+
+      const data = await response.json();
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      return [];
+    }
+  }
+
+  // Create notification
+  static async createNotification(notification: Omit<Notification, 'id' | 'created_at'>): Promise<Notification | null> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/notifications`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(notification)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create notification');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error creating notification:', error);
+      return null;
+    }
+  }
+
+  // Mark notification as read
+  static async markAsRead(notificationId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/notifications/${notificationId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_read: true })
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      return false;
+    }
+  }
   // Email notification templates
   private static emailTemplates = {
     campaign_completed: {

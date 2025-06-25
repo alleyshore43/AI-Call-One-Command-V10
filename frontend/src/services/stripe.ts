@@ -143,28 +143,34 @@ export class StripeService {
   }
 
   // Create checkout session for subscription
-  async createCheckoutSession(priceId: string, customerId?: string): Promise<{ sessionId: string } | null> {
+  async createCheckoutSession(priceId: string, customerEmail?: string): Promise<{ checkout_url: string } | null> {
     if (!this.stripe) {
       console.error('Stripe not initialized');
       return null;
     }
 
     try {
-      const response = await fetch('/api/stripe/create-checkout-session', {
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://work-2-xztkqihbepsagxrs.prod-runtime.all-hands.dev';
+      
+      const response = await fetch(`${API_BASE_URL}/api/billing/create-checkout-session`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           price_id: priceId,
-          customer_id: customerId,
+          customer_email: customerEmail,
           success_url: `${window.location.origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${window.location.origin}/billing`
         })
       });
 
-      const { sessionId } = await response.json();
-      return { sessionId };
+      if (!response.ok) {
+        throw new Error('Failed to create checkout session');
+      }
+
+      const data = await response.json();
+      return { checkout_url: data.checkout_url };
     } catch (error) {
       console.error('Error creating checkout session:', error);
       return null;
@@ -172,15 +178,10 @@ export class StripeService {
   }
 
   // Redirect to Stripe Checkout
-  async redirectToCheckout(sessionId: string): Promise<void> {
-    if (!this.stripe) {
-      console.error('Stripe not initialized');
-      return;
-    }
-
-    const { error } = await this.stripe.redirectToCheckout({ sessionId });
-    
-    if (error) {
+  async redirectToCheckout(checkoutUrl: string): Promise<void> {
+    try {
+      window.location.href = checkoutUrl;
+    } catch (error) {
       console.error('Error redirecting to checkout:', error);
     }
   }

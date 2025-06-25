@@ -1,6 +1,7 @@
-import { DatabaseService } from './database';
-import { RealtimeService } from './realtime';
 import type { CampaignLead } from '../lib/supabase';
+
+// API base URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://work-2-xztkqihbepsagxrs.prod-runtime.all-hands.dev';
 
 interface DialerConfig {
   campaignId: string
@@ -83,8 +84,10 @@ export class AutoDialerEngine {
     await this.hangupActiveCalls();
 
     // Update campaign status
-    await DatabaseService.updateCampaign(this.campaignId, {
-      status: 'paused'
+    await fetch(`${API_BASE_URL}/api/campaigns/${this.campaignId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'paused' })
     });
   }
 
@@ -101,8 +104,10 @@ export class AutoDialerEngine {
       this.dialingInterval = undefined;
     }
 
-    await DatabaseService.updateCampaign(this.campaignId, {
-      status: 'paused'
+    await fetch(`${API_BASE_URL}/api/campaigns/${this.campaignId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'paused' })
     });
   }
 
@@ -119,23 +124,25 @@ export class AutoDialerEngine {
       this.startDialing();
     }
 
-    await DatabaseService.updateCampaign(this.campaignId, {
-      status: 'active'
+    await fetch(`${API_BASE_URL}/api/campaigns/${this.campaignId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'active' })
     });
   }
 
   private async loadDialingQueue(): Promise<void> {
     try {
-      // Get leads that need to be called
-      const leads = await DatabaseService.getCampaignLeads(this.campaignId, {
-        status: ['pending', 'retry'],
-        limit: 1000
-      });
+      // Get leads that need to be called from API
+      const response = await fetch(`${API_BASE_URL}/api/campaigns/${this.campaignId}/leads?status=pending,retry&limit=1000`);
+      if (!response.ok) throw new Error('Failed to fetch campaign leads');
+      
+      const leads = await response.json();
 
       // Filter and prioritize leads
       this.dialingQueue = leads
-        .filter(lead => this.shouldCallLead(lead))
-        .sort((a, b) => {
+        .filter((lead: any) => this.shouldCallLead(lead))
+        .sort((a: any, b: any) => {
           // Sort by priority, then by last call attempt
           const priorityOrder = { urgent: 4, high: 3, normal: 2, low: 1 };
           const aPriority = priorityOrder[a.priority] || 2;
@@ -239,10 +246,11 @@ export class AutoDialerEngine {
       console.log(`Initiating call to ${lead.phone_number} (${lead.first_name} ${lead.last_name})`);
 
       // Get campaign details for agent assignment
-      const campaign = await DatabaseService.getCampaign(this.campaignId);
-      if (!campaign) {
+      const campaignResponse = await fetch(`${API_BASE_URL}/api/campaigns/${this.campaignId}`);
+      if (!campaignResponse.ok) {
         throw new Error('Campaign not found');
       }
+      const campaign = await campaignResponse.json();
 
       // Create call record
       const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -258,26 +266,34 @@ export class AutoDialerEngine {
       this.activeCalls.set(callId, activeCall);
 
       // Update lead status
-      await DatabaseService.updateCampaignLead(lead.id, {
-        status: 'called',
-        call_attempts: (lead.call_attempts || 0) + 1,
-        last_call_at: activeCall.startedAt
+      await fetch(`${API_BASE_URL}/api/campaigns/${this.campaignId}/leads/${lead.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'called',
+          call_attempts: (lead.call_attempts || 0) + 1,
+          last_call_at: activeCall.startedAt
+        })
       });
 
       // Create call log entry
-      await DatabaseService.createCallLog({
-        profile_id: this.userId,
-        agent_id: campaign.agent_id,
-        phone_number_from: campaign.caller_id || '',
-        phone_number_to: lead.phone_number,
-        direction: 'outbound',
-        status: 'pending',
-        started_at: activeCall.startedAt,
-        duration_seconds: 0,
-        priority: lead.priority || 'normal',
-        follow_up_required: false,
-        campaign_id: this.campaignId,
-        lead_id: lead.id
+      await fetch(`${API_BASE_URL}/api/calls`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: this.userId,
+          agent_id: campaign.agent_id,
+          phone_number_from: campaign.caller_id || '',
+          phone_number_to: lead.phone_number,
+          direction: 'outbound',
+          status: 'pending',
+          started_at: activeCall.startedAt,
+          duration_seconds: 0,
+          priority: lead.priority || 'normal',
+          follow_up_required: false,
+          campaign_id: this.campaignId,
+          lead_id: lead.id
+        })
       });
 
       // TODO: Integrate with Twilio to actually place the call
@@ -288,9 +304,13 @@ export class AutoDialerEngine {
       console.error('Error initiating call:', error);
       
       // Update lead status to failed
-      await DatabaseService.updateCampaignLead(lead.id, {
-        status: 'failed',
-        outcome: 'dialer_error'
+      await fetch(`${API_BASE_URL}/api/campaigns/${this.campaignId}/leads/${lead.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'failed',
+          outcome: 'dialer_error'
+        })
       });
     }
   }
@@ -321,18 +341,26 @@ export class AutoDialerEngine {
       );
 
       // Update call log
-      await DatabaseService.updateCallLog(call.id, {
-        status: outcome === 'answered' ? 'completed' : 'failed',
-        ended_at: endTime,
-        duration_seconds: durationSeconds,
-        outcome: outcome
+      await fetch(`${API_BASE_URL}/api/calls/${call.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: outcome === 'answered' ? 'completed' : 'failed',
+          ended_at: endTime,
+          duration_seconds: durationSeconds,
+          outcome: outcome
+        })
       });
 
       // Update lead status
       const leadStatus = outcome === 'answered' ? 'completed' : 'failed';
-      await DatabaseService.updateCampaignLead(call.leadId, {
-        status: leadStatus,
-        outcome: outcome
+      await fetch(`${API_BASE_URL}/api/campaigns/${this.campaignId}/leads/${call.leadId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: leadStatus,
+          outcome: outcome
+        })
       });
 
       // Update campaign statistics
@@ -349,8 +377,10 @@ export class AutoDialerEngine {
 
   private async updateCampaignStats(outcome: string): Promise<void> {
     try {
-      const campaign = await DatabaseService.getCampaign(this.campaignId);
-      if (!campaign) return;
+      const campaignResponse = await fetch(`${API_BASE_URL}/api/campaigns/${this.campaignId}`);
+      if (!campaignResponse.ok) return;
+      
+      const campaign = await campaignResponse.json();
 
       const updates: any = {
         leads_called: (campaign.leads_called || 0) + 1
@@ -364,7 +394,11 @@ export class AutoDialerEngine {
         updates.leads_completed = (campaign.leads_completed || 0) + 1;
       }
 
-      await DatabaseService.updateCampaign(this.campaignId, updates);
+      await fetch(`${API_BASE_URL}/api/campaigns/${this.campaignId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
     } catch (error) {
       console.error('Error updating campaign stats:', error);
     }
@@ -393,21 +427,23 @@ export class AutoDialerEngine {
   }
 
   private subscribeToUpdates(): void {
-    // Subscribe to campaign updates
-    RealtimeService.subscribeToCampaignUpdates(
-      this.userId,
-      async (campaign) => {
-        if (campaign.id === this.campaignId) {
+    // TODO: Implement WebSocket or Server-Sent Events for real-time updates
+    // For now, we'll poll for campaign status changes
+    setInterval(async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/campaigns/${this.campaignId}`);
+        if (response.ok) {
+          const campaign = await response.json();
           if (campaign.status === 'paused' && this.isRunning) {
             await this.pause();
           } else if (campaign.status === 'active' && !this.isRunning) {
             await this.resume();
           }
         }
-      },
-      () => {}, // onInsert
-      () => {}  // onDelete
-    );
+      } catch (error) {
+        console.error('Error checking campaign status:', error);
+      }
+    }, 30000); // Check every 30 seconds
   }
 
   private async hangupActiveCalls(): Promise<void> {

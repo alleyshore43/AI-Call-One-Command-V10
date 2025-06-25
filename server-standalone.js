@@ -7,6 +7,10 @@ import cors from 'cors';
 import { createServer as createHttpServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { createClient } from '@supabase/supabase-js';
+import Stripe from 'stripe';
+import { createObjectCsvWriter } from 'csv-writer';
+import fs from 'fs';
+import path from 'path';
 // Create a simple AudioConverter class directly in this file
 class AudioConverter {
     static base64ToUint8Array(base64) {
@@ -116,6 +120,9 @@ dotenv.config();
 
 // Initialize utilities
 const execAsync = util.promisify(exec);
+
+// Initialize Stripe
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL || 'https://your-project.supabase.co';
@@ -2071,6 +2078,340 @@ app.get('/api/agents/routing-stats', async (req, res) => {
     } catch (error) {
         console.error('Error getting routing stats:', error);
         res.status(500).json({ error: 'Failed to get routing stats' });
+    }
+});
+
+// ===== PRODUCTION API ENDPOINTS =====
+
+// Campaign Management API
+app.get('/api/campaigns', async (req, res) => {
+    try {
+        const { profile_id } = req.query;
+        let query = supabase.from('campaigns').select('*').order('created_at', { ascending: false });
+        
+        if (profile_id) {
+            query = query.eq('profile_id', profile_id);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        res.json(data || []);
+    } catch (error) {
+        console.error('Error fetching campaigns:', error);
+        res.status(500).json({ error: 'Failed to fetch campaigns' });
+    }
+});
+
+app.post('/api/campaigns', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('campaigns')
+            .insert(req.body)
+            .select()
+            .single();
+            
+        if (error) throw error;
+        res.json(data);
+    } catch (error) {
+        console.error('Error creating campaign:', error);
+        res.status(500).json({ error: 'Failed to create campaign' });
+    }
+});
+
+app.put('/api/campaigns/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { data, error } = await supabase
+            .from('campaigns')
+            .update(req.body)
+            .eq('id', id)
+            .select()
+            .single();
+            
+        if (error) throw error;
+        res.json(data);
+    } catch (error) {
+        console.error('Error updating campaign:', error);
+        res.status(500).json({ error: 'Failed to update campaign' });
+    }
+});
+
+app.delete('/api/campaigns/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { error } = await supabase
+            .from('campaigns')
+            .delete()
+            .eq('id', id);
+            
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting campaign:', error);
+        res.status(500).json({ error: 'Failed to delete campaign' });
+    }
+});
+
+// Stripe Billing Integration API
+app.post('/api/billing/create-checkout-session', async (req, res) => {
+    if (!stripe) {
+        return res.status(500).json({ error: 'Stripe not configured' });
+    }
+    
+    try {
+        const { price_id, customer_email, success_url, cancel_url } = req.body;
+        
+        const session = await stripe.checkout.sessions.create({
+            payment_method_types: ['card'],
+            line_items: [{
+                price: price_id,
+                quantity: 1,
+            }],
+            mode: 'subscription',
+            customer_email,
+            success_url,
+            cancel_url,
+        });
+        
+        res.json({ checkout_url: session.url });
+    } catch (error) {
+        console.error('Error creating checkout session:', error);
+        res.status(500).json({ error: 'Failed to create checkout session' });
+    }
+});
+
+app.post('/api/billing/webhook', express.raw({type: 'application/json'}), async (req, res) => {
+    if (!stripe) {
+        return res.status(500).json({ error: 'Stripe not configured' });
+    }
+    
+    const sig = req.headers['stripe-signature'];
+    let event;
+    
+    try {
+        event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    } catch (err) {
+        console.error('Webhook signature verification failed:', err.message);
+        return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+    
+    try {
+        switch (event.type) {
+            case 'customer.subscription.created':
+            case 'customer.subscription.updated':
+                const subscription = event.data.object;
+                await supabase.from('subscriptions').upsert({
+                    stripe_subscription_id: subscription.id,
+                    customer_email: subscription.customer,
+                    status: subscription.status,
+                    current_period_start: new Date(subscription.current_period_start * 1000),
+                    current_period_end: new Date(subscription.current_period_end * 1000),
+                });
+                break;
+                
+            case 'customer.subscription.deleted':
+                const deletedSub = event.data.object;
+                await supabase.from('subscriptions')
+                    .update({ status: 'canceled' })
+                    .eq('stripe_subscription_id', deletedSub.id);
+                break;
+        }
+        
+        res.json({ received: true });
+    } catch (error) {
+        console.error('Error processing webhook:', error);
+        res.status(500).json({ error: 'Webhook processing failed' });
+    }
+});
+
+// DNC Compliance API
+app.get('/api/dnc/entries', async (req, res) => {
+    try {
+        const { phone_number } = req.query;
+        let query = supabase.from('dnc_entries').select('*');
+        
+        if (phone_number) {
+            query = query.eq('phone_number', phone_number);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        res.json(data || []);
+    } catch (error) {
+        console.error('Error fetching DNC entries:', error);
+        res.status(500).json({ error: 'Failed to fetch DNC entries' });
+    }
+});
+
+app.post('/api/dnc/entries', async (req, res) => {
+    try {
+        const { phone_number, reason } = req.body;
+        
+        const { data, error } = await supabase
+            .from('dnc_entries')
+            .insert({
+                phone_number,
+                reason: reason || 'Manual entry',
+                created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+            
+        if (error) throw error;
+        res.json(data);
+    } catch (error) {
+        console.error('Error adding DNC entry:', error);
+        res.status(500).json({ error: 'Failed to add DNC entry' });
+    }
+});
+
+app.delete('/api/dnc/entries/:phone_number', async (req, res) => {
+    try {
+        const { phone_number } = req.params;
+        const { error } = await supabase
+            .from('dnc_entries')
+            .delete()
+            .eq('phone_number', phone_number);
+            
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error removing DNC entry:', error);
+        res.status(500).json({ error: 'Failed to remove DNC entry' });
+    }
+});
+
+// Notifications System API
+app.get('/api/notifications', async (req, res) => {
+    try {
+        const { user_id, unread_only } = req.query;
+        let query = supabase.from('notifications').select('*').order('created_at', { ascending: false });
+        
+        if (user_id) {
+            query = query.eq('user_id', user_id);
+        }
+        
+        if (unread_only === 'true') {
+            query = query.eq('read', false);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        res.json(data || []);
+    } catch (error) {
+        console.error('Error fetching notifications:', error);
+        res.status(500).json({ error: 'Failed to fetch notifications' });
+    }
+});
+
+app.post('/api/notifications', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('notifications')
+            .insert({
+                ...req.body,
+                created_at: new Date().toISOString(),
+                read: false
+            })
+            .select()
+            .single();
+            
+        if (error) throw error;
+        res.json(data);
+    } catch (error) {
+        console.error('Error creating notification:', error);
+        res.status(500).json({ error: 'Failed to create notification' });
+    }
+});
+
+app.put('/api/notifications/:id/read', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { data, error } = await supabase
+            .from('notifications')
+            .update({ read: true })
+            .eq('id', id)
+            .select()
+            .single();
+            
+        if (error) throw error;
+        res.json(data);
+    } catch (error) {
+        console.error('Error marking notification as read:', error);
+        res.status(500).json({ error: 'Failed to mark notification as read' });
+    }
+});
+
+// Data Export API
+app.get('/api/export/calls', async (req, res) => {
+    try {
+        const { start_date, end_date, format = 'csv' } = req.query;
+        
+        let query = supabase.from('call_logs').select('*');
+        
+        if (start_date) {
+            query = query.gte('created_at', start_date);
+        }
+        
+        if (end_date) {
+            query = query.lte('created_at', end_date);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (format === 'csv') {
+            const csvWriter = createObjectCsvWriter({
+                path: '/tmp/calls_export.csv',
+                header: [
+                    { id: 'id', title: 'ID' },
+                    { id: 'phone_number', title: 'Phone Number' },
+                    { id: 'duration', title: 'Duration' },
+                    { id: 'status', title: 'Status' },
+                    { id: 'created_at', title: 'Date' }
+                ]
+            });
+            
+            await csvWriter.writeRecords(data);
+            res.download('/tmp/calls_export.csv');
+        } else {
+            res.json(data);
+        }
+    } catch (error) {
+        console.error('Error exporting calls:', error);
+        res.status(500).json({ error: 'Failed to export calls' });
+    }
+});
+
+app.get('/api/export/campaigns', async (req, res) => {
+    try {
+        const { format = 'csv' } = req.query;
+        
+        const { data, error } = await supabase.from('campaigns').select('*');
+        if (error) throw error;
+        
+        if (format === 'csv') {
+            const csvWriter = createObjectCsvWriter({
+                path: '/tmp/campaigns_export.csv',
+                header: [
+                    { id: 'id', title: 'ID' },
+                    { id: 'name', title: 'Name' },
+                    { id: 'status', title: 'Status' },
+                    { id: 'created_at', title: 'Created At' }
+                ]
+            });
+            
+            await csvWriter.writeRecords(data);
+            res.download('/tmp/campaigns_export.csv');
+        } else {
+            res.json(data);
+        }
+    } catch (error) {
+        console.error('Error exporting campaigns:', error);
+        res.status(500).json({ error: 'Failed to export campaigns' });
     }
 });
 
