@@ -21,11 +21,13 @@ export class GeminiLiveClient {
         
         // Add API key to URL
         const url = new URL(baseUrl);
-        url.searchParams.append('key', options.apiKey);
+        if (server?.apiKey) {
+            url.searchParams.append('key', server.apiKey);
+        }
         
         // Add model to URL if provided
-        if (options.model) {
-            url.searchParams.append('model', options.model);
+        if (options.setup?.model) {
+            url.searchParams.append('model', options.setup.model);
         }
         
         // Connect to Gemini Live
@@ -41,17 +43,9 @@ export class GeminiLiveClient {
     private handleOpen() {
         console.log('Connected to Gemini Live');
         
-        // Send initial request
+        // Send initial setup request
         const initialRequest: BidiRequest = {
-            bidiRequest: {
-                generateContentRequest: {
-                    contents: [],
-                    generationConfig: this.options.generationConfig,
-                    safetySettings: this.options.safetySettings,
-                    tools: this.options.tools,
-                    toolConfig: this.options.toolConfig
-                }
-            }
+            setup: this.options.setup
         };
         
         this.socket.send(JSON.stringify(initialRequest));
@@ -61,23 +55,16 @@ export class GeminiLiveClient {
         try {
             const data = JSON.parse(event.data.toString()) as BidiGenerateContentServerMessage;
             
-            if (data.bidiResponse?.generateContentResponse?.usageMetadata) {
+            if (data.setupComplete) {
                 // This is the initial response, indicating the connection is ready
                 this.isReady = true;
                 if (this.onReady) {
                     this.onReady();
                 }
-            } else if (data.bidiResponse?.generateContentResponse?.candidates?.[0]?.content) {
+            } else if (data.serverContent) {
                 // This is a content response
-                const content = data.bidiResponse.generateContentResponse.candidates[0].content;
-                
                 if (this.onServerContent) {
-                    this.onServerContent({
-                        type: content.parts?.[0]?.functionCall ? 'functionCall' : 'text',
-                        text: content.parts?.[0]?.text || '',
-                        functionCall: content.parts?.[0]?.functionCall,
-                        modelTurn: content
-                    });
+                    this.onServerContent(data.serverContent);
                 }
             }
         } catch (error) {
@@ -107,19 +94,18 @@ export class GeminiLiveClient {
         }
         
         const request: BidiRequest = {
-            bidiRequest: {
-                generateContentRequest: {
-                    contents: [
-                        {
-                            role: 'user',
-                            parts: [
-                                {
-                                    text: message.text
-                                }
-                            ]
-                        }
-                    ]
-                }
+            clientContent: {
+                turns: [
+                    {
+                        role: 'user',
+                        parts: [
+                            {
+                                text: message.text
+                            }
+                        ]
+                    }
+                ],
+                turnComplete: true
             }
         };
         
@@ -133,11 +119,7 @@ export class GeminiLiveClient {
         }
         
         const request: BidiRequest = {
-            bidiRequest: {
-                generateContentRequest: {
-                    realtimeInput: input
-                }
-            }
+            realtimeInput: input
         };
         
         this.socket.send(JSON.stringify(request));
@@ -145,5 +127,26 @@ export class GeminiLiveClient {
     
     public close() {
         this.socket.close();
+    }
+
+    // Compatibility methods for server.ts
+    public sendSetup() {
+        // Already handled in handleOpen
+    }
+
+    public handlerMessage(event: MessageEvent) {
+        this.handleMessage(event);
+    }
+
+    public sendText(text: string) {
+        this.sendMessage({ type: 'text', text });
+    }
+
+    public sendRealTime(input: BidiGenerateContentRealtimeInput) {
+        this.sendRealtimeInput(input);
+    }
+
+    public send(data: any) {
+        this.socket.send(JSON.stringify(data));
     }
 }

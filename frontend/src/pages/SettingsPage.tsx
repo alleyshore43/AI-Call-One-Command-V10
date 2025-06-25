@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 export default function SettingsPage() {
   const { user, updateUser } = useUser();
   const [loading, setLoading] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showApiKeys, setShowApiKeys] = useState({
     gemini: false,
     twilioSid: false,
@@ -237,7 +238,7 @@ export default function SettingsPage() {
 
             <div className="sm:col-span-2">
               <label htmlFor="system-instruction" className="block text-sm font-medium text-gray-700">
-                System Instruction
+                AI Personality & Goals
               </label>
               <textarea
                 id="system-instruction"
@@ -245,17 +246,33 @@ export default function SettingsPage() {
                 value={formData.system_instruction}
                 onChange={(e) => handleInputChange('system_instruction', e.target.value)}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                placeholder="You are a professional AI assistant for customer service calls. Be helpful, polite, and efficient..."
+                placeholder="Example: You are a friendly customer service representative for ABC Company. Always be helpful, patient, and try to resolve customer issues quickly. If you can't help, offer to transfer them to a human agent."
               />
               <p className="mt-1 text-xs text-gray-500">
-                This instruction guides how your AI agent behaves during calls
+                Describe how your AI should behave and what its goals are during calls
               </p>
+            </div>
+
+            {/* Advanced Settings Toggle */}
+            <div className="sm:col-span-2">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium"
+              >
+                <span className="mr-2">
+                  {showAdvanced ? '▼' : '▶'}
+                </span>
+                Advanced Settings
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Phone Configuration */}
+      {showAdvanced && (
+        <>
+          {/* Phone Configuration */}
       <div className="bg-white shadow-sm rounded-lg border border-gray-200">
         <div className="px-4 py-5 sm:p-6">
           <div className="flex items-center mb-6">
@@ -282,7 +299,7 @@ export default function SettingsPage() {
 
             <div>
               <label htmlFor="webhook-url" className="block text-sm font-medium text-gray-700">
-                Webhook URL
+                Integration URL
               </label>
               <input
                 type="url"
@@ -303,7 +320,7 @@ export default function SettingsPage() {
           <div className="flex items-center mb-6">
             <KeyIcon className="h-6 w-6 text-gray-400 mr-3" />
             <h3 className="text-lg leading-6 font-medium text-gray-900">
-              API Keys
+              Service Connections
             </h3>
           </div>
           
@@ -455,6 +472,9 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+      )}
+
+        </>
       )}
 
       <div className="flex justify-end space-x-3">

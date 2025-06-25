@@ -42,7 +42,7 @@ interface IVROption {
 }
 
 const ROUTING_STRATEGIES = [
-  { value: 'single_number_ivr', label: 'Single Number with IVR Menu' },
+  { value: 'single_number_ivr', label: 'Single Number with Phone Menu' },
   { value: 'multiple_numbers', label: 'Multiple Dedicated Numbers' },
   { value: 'external_integration', label: 'External System Integration' },
   { value: 'time_based', label: 'Time-Based Routing' }
@@ -327,7 +327,7 @@ const RoutingManager: React.FC = () => {
   const renderIVRConfig = () => {
     return (
       <div className="mt-4 p-4 border rounded">
-        <h3 className="text-lg font-semibold">IVR Menu Configuration</h3>
+        <h3 className="text-lg font-semibold">Phone Menu Configuration</h3>
         
         {/* IVR menu form */}
         <div className="mt-4">

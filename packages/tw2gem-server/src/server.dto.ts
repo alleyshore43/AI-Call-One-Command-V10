@@ -1,4 +1,5 @@
-import { GeminiLiveClient, GeminiLiveClientOptions } from '@tw2gem/gemini-live-client';
+import { GeminiLiveClientOptions } from '@tw2gem/gemini-live-client';
+import { GeminiLiveClient } from './gemini-live-client';
 import { TwilioWebSocket } from '@tw2gem/twilio-server';
 import { ServerOptions } from 'ws';
 

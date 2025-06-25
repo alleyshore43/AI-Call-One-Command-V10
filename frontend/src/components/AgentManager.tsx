@@ -32,7 +32,7 @@ const CALL_DIRECTION_OPTIONS = [
 
 const ROUTING_TYPE_OPTIONS = [
   { value: 'direct', label: 'Direct Connection (Default)' },
-  { value: 'ivr', label: 'IVR Menu (Interactive Voice Response)' },
+  { value: 'ivr', label: 'Phone Menu (Interactive Voice Response)' },
   { value: 'forward', label: 'Forward to Phone Number' }
 ];
 
@@ -78,6 +78,7 @@ const AgentManager: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editingAgent, setEditingAgent] = useState<AIAgent | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [formData, setFormData] = useState<Partial<AIAgent>>({
     name: '',
     description: '',
@@ -402,11 +403,11 @@ const AgentManager: React.FC = () => {
                   {formData.routing_type === 'ivr' && (
                     <div>
                       <label className="block text-sm font-medium mb-1">
-                        IVR Menu
-                        <span className="text-xs text-gray-500 ml-1">(Required for IVR)</span>
+                        Phone Menu
+                        <span className="text-xs text-gray-500 ml-1">(Required for Phone Menu)</span>
                       </label>
                       <p className="text-xs text-gray-600 mt-1">
-                        IVR menus can be configured after creating the agent. Save this agent first, then use the IVR menu editor.
+                        Phone menus can be configured after creating the agent. Save this agent first, then use the phone menu editor.
                       </p>
                     </div>
                   )}
@@ -467,17 +468,34 @@ const AgentManager: React.FC = () => {
                   </div>
                   
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">System Instructions</label>
+                    <label className="block text-sm font-medium mb-1">AI Personality & Goals</label>
                     <textarea
                       name="system_instruction"
                       value={formData.system_instruction || ''}
                       onChange={handleInputChange}
                       className="w-full border rounded p-2"
                       rows={6}
+                      placeholder="Describe how your AI should behave and what its goals are. For example: 'You are a friendly customer service representative who helps customers with their orders. Be helpful, patient, and always try to resolve their issues.'"
                     />
                   </div>
-                  
-                  <div>
+
+                  {/* Advanced Settings Toggle */}
+                  <div className="md:col-span-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvanced(!showAdvanced)}
+                      className="flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      <span className="mr-2">
+                        {showAdvanced ? '▼' : '▶'}
+                      </span>
+                      Advanced Settings
+                    </button>
+                  </div>
+
+                  {showAdvanced && (
+                    <>
+                      <div>
                     <label className="block text-sm font-medium mb-1">Max Concurrent Calls</label>
                     <input
                       type="number"
@@ -553,18 +571,20 @@ const AgentManager: React.FC = () => {
                     </div>
                   </div>
                   
-                  <div className="md:col-span-2">
-                    <label className="inline-flex items-center">
-                      <input
-                        type="checkbox"
-                        name="is_active"
-                        checked={formData.is_active || false}
-                        onChange={handleCheckboxChange}
-                        className="form-checkbox h-5 w-5 text-blue-600"
-                      />
-                      <span className="ml-2">Active</span>
-                    </label>
-                  </div>
+                      <div className="md:col-span-2">
+                        <label className="inline-flex items-center">
+                          <input
+                            type="checkbox"
+                            name="is_active"
+                            checked={formData.is_active || false}
+                            onChange={handleCheckboxChange}
+                            className="form-checkbox h-5 w-5 text-blue-600"
+                          />
+                          <span className="ml-2">Active</span>
+                        </label>
+                      </div>
+                    </>
+                  )}
                 </div>
                 
                 <div className="flex justify-end mt-6 space-x-4">

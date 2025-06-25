@@ -214,7 +214,7 @@ const IVRMenuManager: React.FC<IVRMenuManagerProps> = ({ agentId, onClose }) => 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">IVR Menu Configuration</h2>
+        <h2 className="text-2xl font-bold">Phone Menu Configuration</h2>
         <button 
           onClick={onClose}
           className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"

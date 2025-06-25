@@ -411,12 +411,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    System Instruction
+                    AI Personality & Goals
                   </label>
                   <textarea 
                     className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     rows={3}
-                    defaultValue="You are a professional AI assistant for customer service calls. Be helpful, polite, and efficient."
+                    placeholder="Example: You are a friendly customer service representative for ABC Company. Always be helpful, patient, and try to resolve customer issues quickly. If you can't help, offer to transfer them to a human agent."
                   />
                 </div>
               </div>

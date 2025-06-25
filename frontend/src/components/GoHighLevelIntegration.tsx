@@ -286,7 +286,7 @@ export default function GoHighLevelIntegration() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Webhook URL (Optional)</label>
+            <label className="block text-sm font-medium mb-1">Integration URL (Optional)</label>
             <input
               type="url"
               name="webhook_url"
