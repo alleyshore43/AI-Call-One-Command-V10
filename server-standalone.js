@@ -269,14 +269,8 @@ class Tw2GemServer extends TwilioWebSocketServer {
                 // Gemini Live client connects automatically in constructor
                 console.log('🤖 Gemini Live client ready for audio');
                 
-                // **FIX**: Immediately send an empty text prompt to make Gemini speak first.
-                // This is the correct way to initiate the conversation.
-                try {
-                    console.log(`🎤 Prompting Gemini to initiate conversation for stream: ${socket.twilioStreamSid}`);
-                    socket.geminiLive.sendClientContent({ text: '' });
-                } catch (err) {
-                    console.error(`❌ Error sending initial prompt to Gemini for stream ${socket.twilioStreamSid}:`, err);
-                }
+                // Gemini will speak first through the onReady event handler
+                console.log(`🎤 Gemini will initiate conversation for stream: ${socket.twilioStreamSid}`);
                 break;
                 
             case 'media':
@@ -490,7 +484,6 @@ app.post('/webhook/voice', async (req, res) => {
             case 'play_ivr':
                 console.log('🎵 Playing IVR menu');
                 // Implement IVR logic here
-                twiml.say('Welcome to our service. Please hold while we connect you.');
                 // Fall through to connect_ai for now
                 
             case 'connect_ai':
@@ -499,20 +492,11 @@ app.post('/webhook/voice', async (req, res) => {
                 // Start a stream to capture audio
                 const start = twiml.start();
                 start.stream({
-                    url: `wss://work-2-bsdyxgpeckswizwe.prod-runtime.all-hands.dev`,
+                    url: process.env.WEBHOOK_URL ? `wss://${process.env.WEBHOOK_URL.replace('https://', '')}` : `wss://work-2-pxyrgovifxspwgkg.prod-runtime.all-hands.dev`,
                     track: 'both_tracks'
                 });
                 break;
         }
-        
-        // Use agent's custom greeting or default
-        const greeting = selectedAgent.greeting || 
-                        `Hello! Thank you for calling. I'm ${selectedAgent.name}, your ${selectedAgent.agent_type} assistant. How can I help you today?`;
-        
-        twiml.say({
-            voice: 'alice',
-            language: selectedAgent.language_code || 'en-US'
-        }, greeting);
         
         // Keep the call alive
         twiml.pause({ length: 60 });
@@ -539,11 +523,6 @@ app.post('/webhook/voice', async (req, res) => {
             url: process.env.WEBHOOK_URL ? `wss://${process.env.WEBHOOK_URL.replace('https://', '')}` : `wss://work-2-jgeklehodwtesuya.prod-runtime.all-hands.dev`,
             track: 'both_tracks'
         });
-        
-        twiml.say({
-            voice: 'alice',
-            language: 'en-US'
-        }, 'Hello! I am your AI assistant. How can I help you today?');
         
         twiml.pause({ length: 60 });
         
