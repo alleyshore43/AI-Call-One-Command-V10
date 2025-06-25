@@ -30,6 +30,12 @@ const CALL_DIRECTION_OPTIONS = [
   { value: 'both', label: 'Both Inbound & Outbound' }
 ];
 
+const ROUTING_TYPE_OPTIONS = [
+  { value: 'direct', label: 'Direct Connection (Default)' },
+  { value: 'ivr', label: 'IVR Menu (Interactive Voice Response)' },
+  { value: 'forward', label: 'Forward to Phone Number' }
+];
+
 const LANGUAGE_OPTIONS = [
   { value: 'en-US', label: 'English (US)' },
   { value: 'en-GB', label: 'English (UK)' },
@@ -76,7 +82,8 @@ const AgentManager: React.FC = () => {
     name: '',
     description: '',
     agent_type: 'general',
-    call_direction: 'inbound', // NEW: Default to inbound
+    call_direction: 'inbound',
+    routing_type: 'direct', // Default to direct connection
     voice_name: 'Puck',
     language_code: 'en-US',
     system_instruction: '',
@@ -86,7 +93,9 @@ const AgentManager: React.FC = () => {
     business_hours_start: '09:00',
     business_hours_end: '17:00',
     business_days: [1, 2, 3, 4, 5], // Monday to Friday
-    is_active: true
+    is_active: true,
+    forward_number: '', // For forward routing type
+    ivr_menu_id: null // For IVR routing type
   });
 
   useEffect(() => {
@@ -167,6 +176,8 @@ const AgentManager: React.FC = () => {
         name: '',
         description: '',
         agent_type: 'general',
+        call_direction: 'inbound',
+        routing_type: 'direct',
         voice_name: 'Puck',
         language_code: 'en-US',
         system_instruction: DEFAULT_SYSTEM_INSTRUCTIONS.general,
@@ -176,7 +187,9 @@ const AgentManager: React.FC = () => {
         business_hours_start: '09:00',
         business_hours_end: '17:00',
         business_days: [1, 2, 3, 4, 5],
-        is_active: true
+        is_active: true,
+        forward_number: '',
+        ivr_menu_id: null
       });
       setEditingAgent(null);
       setShowForm(false);
@@ -193,6 +206,8 @@ const AgentManager: React.FC = () => {
       name: agent.name,
       description: agent.description || '',
       agent_type: agent.agent_type,
+      call_direction: agent.call_direction || 'inbound',
+      routing_type: agent.routing_type || 'direct',
       voice_name: agent.voice_name,
       language_code: agent.language_code,
       system_instruction: agent.system_instruction || DEFAULT_SYSTEM_INSTRUCTIONS[agent.agent_type as keyof typeof DEFAULT_SYSTEM_INSTRUCTIONS] || '',
@@ -202,7 +217,9 @@ const AgentManager: React.FC = () => {
       business_hours_start: agent.business_hours_start || '09:00',
       business_hours_end: agent.business_hours_end || '17:00',
       business_days: agent.business_days || [1, 2, 3, 4, 5],
-      is_active: agent.is_active
+      is_active: agent.is_active,
+      forward_number: agent.forward_number || '',
+      ivr_menu_id: agent.ivr_menu_id || null
     });
     setShowForm(true);
   };
@@ -337,6 +354,62 @@ const AgentManager: React.FC = () => {
                       Inbound agents handle incoming calls. Outbound agents make calls. Choose "Both" for flexible agents.
                     </p>
                   </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Routing Type
+                      <span className="text-xs text-gray-500 ml-1">(How calls are handled)</span>
+                    </label>
+                    <select
+                      name="routing_type"
+                      value={formData.routing_type || 'direct'}
+                      onChange={handleInputChange}
+                      className="w-full border rounded p-2"
+                      required
+                    >
+                      {ROUTING_TYPE_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Direct connects caller directly to this agent. IVR presents a menu. Forward routes to a phone number.
+                    </p>
+                  </div>
+                  
+                  {formData.routing_type === 'forward' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        Forward Number
+                        <span className="text-xs text-gray-500 ml-1">(Required for forwarding)</span>
+                      </label>
+                      <input
+                        type="tel"
+                        name="forward_number"
+                        value={formData.forward_number || ''}
+                        onChange={handleInputChange}
+                        className="w-full border rounded p-2"
+                        placeholder="+1234567890"
+                        required={formData.routing_type === 'forward'}
+                      />
+                      <p className="text-xs text-gray-600 mt-1">
+                        Enter the phone number to forward calls to, including country code.
+                      </p>
+                    </div>
+                  )}
+                  
+                  {formData.routing_type === 'ivr' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        IVR Menu
+                        <span className="text-xs text-gray-500 ml-1">(Required for IVR)</span>
+                      </label>
+                      <p className="text-xs text-gray-600 mt-1">
+                        IVR menus can be configured after creating the agent. Save this agent first, then use the IVR menu editor.
+                      </p>
+                    </div>
+                  )}
                   
                   <div>
                     <label className="block text-sm font-medium mb-1">Voice</label>

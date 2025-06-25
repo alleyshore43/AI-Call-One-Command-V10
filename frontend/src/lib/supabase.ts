@@ -44,7 +44,8 @@ export interface AIAgent {
   description?: string
   greeting?: string
   agent_type: 'customer_service' | 'sales' | 'support' | 'appointment_booking' | 'survey' | 'after_hours' | 'general'
-  call_direction: 'inbound' | 'outbound' | 'both' // NEW: Call direction for smart routing
+  call_direction: 'inbound' | 'outbound' | 'both'
+  routing_type?: 'direct' | 'ivr' | 'forward'
   voice_name: 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Aoede' | 'Leda' | 'Orus' | 'Zephyr'
   language_code: string
   system_instruction?: string
@@ -61,6 +62,30 @@ export interface AIAgent {
   escalation_phone_number?: string
   escalation_email?: string
   status?: 'available' | 'busy' | 'offline'
+  forward_number?: string
+  ivr_menu_id?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface IVRMenu {
+  id: string
+  name: string
+  greeting_text: string
+  timeout_message?: string
+  invalid_message?: string
+  max_attempts?: number
+  created_at: string
+  updated_at: string
+  ivr_options?: IVROption[]
+}
+
+export interface IVROption {
+  id: string
+  ivr_menu_id: string
+  digit: string
+  description: string
+  agent_id: string
   created_at: string
   updated_at: string
 }

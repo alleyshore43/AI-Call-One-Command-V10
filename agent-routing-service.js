@@ -83,7 +83,7 @@ export class AgentRoutingService {
             
             // Enhance agent with defaults and determine routing action
             agent = this.enhanceAgentWithDefaults(agent);
-            const routingAction = this.determineRoutingAction(agent, callData);
+            const routingAction = await this.determineRoutingAction(agent, callData);
             
             console.log(`✅ Selected agent: ${agent.name} (${agent.agent_type}) - Routing: ${routingAction.type}`);
             
@@ -107,7 +107,7 @@ export class AgentRoutingService {
      * @param {Object} callData - Call data
      * @returns {Object} Routing action
      */
-    determineRoutingAction(agent, callData) {
+    async determineRoutingAction(agent, callData) {
         const routingType = agent.routing_type || 'direct';
         
         switch (routingType) {
@@ -123,15 +123,33 @@ export class AgentRoutingService {
                 // Fall through to direct if no forward number
                 
             case 'ivr':
-                if (agent.ivr_enabled && agent.ivr_menu) {
-                    return {
-                        type: 'ivr',
-                        action: 'play_ivr',
-                        menu: agent.ivr_menu,
-                        message: 'Playing IVR menu'
-                    };
+                // Check if agent has an IVR menu ID
+                if (agent.ivr_menu_id) {
+                    try {
+                        // Fetch the IVR menu
+                        const { data: ivrMenu, error } = await this.supabase
+                            .from('ivr_menus')
+                            .select('*, ivr_options(*)')
+                            .eq('id', agent.ivr_menu_id)
+                            .single();
+                            
+                        if (error) {
+                            console.error('❌ Error fetching IVR menu:', error);
+                            // Fall through to direct connection
+                        } else if (ivrMenu) {
+                            return {
+                                type: 'ivr',
+                                action: 'play_ivr',
+                                menu: ivrMenu,
+                                message: `Playing IVR menu: ${ivrMenu.name}`
+                            };
+                        }
+                    } catch (error) {
+                        console.error('❌ Error in IVR menu lookup:', error);
+                        // Fall through to direct connection
+                    }
                 }
-                // Fall through to direct if IVR not configured
+                // Fall through to direct if IVR not configured or error
                 
             case 'direct':
             default:
@@ -140,6 +158,49 @@ export class AgentRoutingService {
                     action: 'connect_ai',
                     message: 'Connecting directly to AI agent'
                 };
+        }
+    }
+    
+    /**
+     * Get IVR menu for an agent
+     * @param {string} agentId - Agent ID
+     * @returns {Promise<Object>} IVR menu with options
+     */
+    async getIVRMenu(agentId) {
+        try {
+            // Get the agent
+            const { data: agent, error: agentError } = await this.supabase
+                .from('ai_agents')
+                .select('*')
+                .eq('id', agentId)
+                .single();
+                
+            if (agentError) {
+                console.error('❌ Error fetching agent:', agentError);
+                return null;
+            }
+            
+            if (!agent.ivr_menu_id) {
+                console.log('⚠️ Agent does not have an IVR menu');
+                return null;
+            }
+            
+            // Get the IVR menu
+            const { data: ivrMenu, error: ivrMenuError } = await this.supabase
+                .from('ivr_menus')
+                .select('*, ivr_options(*)')
+                .eq('id', agent.ivr_menu_id)
+                .single();
+                
+            if (ivrMenuError) {
+                console.error('❌ Error fetching IVR menu:', ivrMenuError);
+                return null;
+            }
+            
+            return ivrMenu;
+        } catch (error) {
+            console.error('❌ Error in getIVRMenu:', error);
+            return null;
         }
     }
 
