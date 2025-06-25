@@ -1,6 +1,8 @@
 // import { DatabaseService } from '../../dashboard/src/services/database'
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
+// Import GhlService dynamically to avoid module not found error
+// import { GhlService } from './ghl-service';
 
 export interface FunctionCallRequest {
   name: string
@@ -57,12 +59,31 @@ export class FunctionCallHandler {
   private functions: Map<string, FunctionDefinition> = new Map();
   private supabase: any;
   private zapierIntegrations: Map<string, ZapierIntegration> = new Map();
+  private ghlService: any = null;
 
   constructor(supabaseUrl?: string, supabaseKey?: string) {
     if (supabaseUrl && supabaseKey) {
       this.supabase = createClient(supabaseUrl, supabaseKey);
     }
     this.registerCoreFunctions();
+  }
+  
+  // Set the GHL service instance
+  setGhlService(apiKey: string, locationId: string) {
+    try {
+      // Dynamically import GhlService
+      const GhlServiceClass = require('./ghl-service').GhlService;
+      this.ghlService = new GhlServiceClass(apiKey, locationId);
+    } catch (error) {
+      console.error('Failed to initialize GHL service:', error);
+    }
+    this.registerGhlFunctions();
+  }
+  
+  // Clear the GHL service instance
+  clearGhlService() {
+    this.ghlService = null;
+    this.unregisterGhlFunctions();
   }
   
   // Load Zapier integrations for a specific agent
@@ -305,6 +326,181 @@ export class FunctionCallHandler {
       },
       handler: this.handleScheduleAppointment.bind(this),
       requiresAuth: true
+    });
+  }
+  
+  // Register GHL functions
+  private registerGhlFunctions() {
+    // Only register if GHL service is available
+    if (!this.ghlService) {
+      return;
+    }
+    
+    // Search for a contact by phone number
+    this.registerFunction({
+      name: 'ghl_search_contact',
+      description: 'Searches for a contact in GoHighLevel using their phone number. Returns the contact ID if found. Always use this before creating a contact.',
+      parameters: {
+        type: 'object',
+        properties: {
+          phone_number: {
+            type: 'string',
+            description: 'The phone number to search for'
+          }
+        },
+        required: ['phone_number']
+      },
+      handler: this.handleGhlSearchContact.bind(this)
+    });
+    
+    // Create a new contact
+    this.registerFunction({
+      name: 'ghl_create_contact',
+      description: 'Creates a new contact in GoHighLevel with their name and phone number.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'The contact\'s full name'
+          },
+          phone_number: {
+            type: 'string',
+            description: 'The contact\'s phone number'
+          },
+          email: {
+            type: 'string',
+            description: 'The contact\'s email address (optional)'
+          },
+          tags: {
+            type: 'array',
+            items: {
+              type: 'string'
+            },
+            description: 'Tags to apply to the contact (optional)'
+          }
+        },
+        required: ['name', 'phone_number']
+      },
+      handler: this.handleGhlCreateContact.bind(this)
+    });
+    
+    // Add a note to a contact
+    this.registerFunction({
+      name: 'ghl_add_note',
+      description: 'Adds a summary or note to an existing contact\'s record in GoHighLevel. You must get the contact ID first by using the search_contact tool.',
+      parameters: {
+        type: 'object',
+        properties: {
+          contact_id: {
+            type: 'string',
+            description: 'The ID of the contact'
+          },
+          note: {
+            type: 'string',
+            description: 'The note content to add'
+          }
+        },
+        required: ['contact_id', 'note']
+      },
+      handler: this.handleGhlAddNote.bind(this)
+    });
+    
+    // Create an opportunity
+    this.registerFunction({
+      name: 'ghl_create_opportunity',
+      description: 'Creates a new opportunity for a contact in GoHighLevel.',
+      parameters: {
+        type: 'object',
+        properties: {
+          contact_id: {
+            type: 'string',
+            description: 'The ID of the contact'
+          },
+          name: {
+            type: 'string',
+            description: 'The name of the opportunity'
+          },
+          pipeline_id: {
+            type: 'string',
+            description: 'The ID of the pipeline'
+          },
+          stage_id: {
+            type: 'string',
+            description: 'The ID of the stage'
+          },
+          status: {
+            type: 'string',
+            enum: ['open', 'won', 'lost'],
+            description: 'The status of the opportunity'
+          },
+          value: {
+            type: 'number',
+            description: 'The monetary value of the opportunity'
+          },
+          notes: {
+            type: 'string',
+            description: 'Notes about the opportunity'
+          }
+        },
+        required: ['contact_id', 'name', 'pipeline_id', 'stage_id']
+      },
+      handler: this.handleGhlCreateOpportunity.bind(this)
+    });
+    
+    // Create an appointment
+    this.registerFunction({
+      name: 'ghl_create_appointment',
+      description: 'Creates a new appointment for a contact in GoHighLevel.',
+      parameters: {
+        type: 'object',
+        properties: {
+          contact_id: {
+            type: 'string',
+            description: 'The ID of the contact'
+          },
+          title: {
+            type: 'string',
+            description: 'The title of the appointment'
+          },
+          description: {
+            type: 'string',
+            description: 'The description of the appointment'
+          },
+          start_time: {
+            type: 'string',
+            description: 'The start time of the appointment (ISO date string)'
+          },
+          end_time: {
+            type: 'string',
+            description: 'The end time of the appointment (ISO date string)'
+          },
+          calendar_id: {
+            type: 'string',
+            description: 'The ID of the calendar'
+          }
+        },
+        required: ['contact_id', 'title', 'start_time', 'end_time', 'calendar_id']
+      },
+      handler: this.handleGhlCreateAppointment.bind(this)
+    });
+  }
+  
+  // Unregister GHL functions
+  private unregisterGhlFunctions() {
+    const ghlFunctions = [
+      'ghl_search_contact',
+      'ghl_create_contact',
+      'ghl_add_note',
+      'ghl_create_opportunity',
+      'ghl_create_appointment'
+    ];
+    
+    ghlFunctions.forEach(name => {
+      if (this.functions.has(name)) {
+        this.functions.delete(name);
+        console.log(`Unregistered GHL function: ${name}`);
+      }
     });
 
     // Update lead status function
@@ -912,6 +1108,166 @@ export class FunctionCallHandler {
         .insert(logData);
     } catch (error) {
       console.error('Error logging function call:', error);
+    }
+  }
+
+  // GHL Function Handlers
+  
+  // Handle GHL search contact function
+  private async handleGhlSearchContact(args: Record<string, any>, context: FunctionContext): Promise<any> {
+    if (!this.ghlService) {
+      throw new Error('GHL service is not initialized');
+    }
+    
+    const { phone_number } = args;
+    
+    try {
+      const contact = await this.ghlService.searchContactByPhone(phone_number);
+      
+      if (!contact) {
+        return {
+          found: false,
+          message: 'No contact found with this phone number'
+        };
+      }
+      
+      return {
+        found: true,
+        contact_id: contact.id,
+        contact_details: {
+          name: contact.name,
+          email: contact.email,
+          phone: contact.phone,
+          tags: contact.tags
+        }
+      };
+    } catch (error) {
+      console.error('Error in handleGhlSearchContact:', error);
+      throw new Error(`Failed to search for contact: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  // Handle GHL create contact function
+  private async handleGhlCreateContact(args: Record<string, any>, context: FunctionContext): Promise<any> {
+    if (!this.ghlService) {
+      throw new Error('GHL service is not initialized');
+    }
+    
+    const { name, phone_number, email, tags } = args;
+    
+    try {
+      // First check if contact already exists
+      const existingContact = await this.ghlService.searchContactByPhone(phone_number);
+      
+      if (existingContact) {
+        return {
+          already_exists: true,
+          contact_id: existingContact.id,
+          message: 'Contact already exists with this phone number'
+        };
+      }
+      
+      // Create new contact
+      const contactData = {
+        name,
+        phone: phone_number,
+        email: email || undefined,
+        tags: tags || undefined
+      };
+      
+      const newContact = await this.ghlService.createContact(contactData);
+      
+      return {
+        success: true,
+        contact_id: newContact.id,
+        message: 'Contact created successfully'
+      };
+    } catch (error) {
+      console.error('Error in handleGhlCreateContact:', error);
+      throw new Error(`Failed to create contact: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  // Handle GHL add note function
+  private async handleGhlAddNote(args: Record<string, any>, context: FunctionContext): Promise<any> {
+    if (!this.ghlService) {
+      throw new Error('GHL service is not initialized');
+    }
+    
+    const { contact_id, note } = args;
+    
+    try {
+      const result = await this.ghlService.addNoteToContact(contact_id, note);
+      
+      return {
+        success: true,
+        note_id: result.id,
+        message: 'Note added successfully'
+      };
+    } catch (error) {
+      console.error('Error in handleGhlAddNote:', error);
+      throw new Error(`Failed to add note: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  // Handle GHL create opportunity function
+  private async handleGhlCreateOpportunity(args: Record<string, any>, context: FunctionContext): Promise<any> {
+    if (!this.ghlService) {
+      throw new Error('GHL service is not initialized');
+    }
+    
+    const { contact_id, name, pipeline_id, stage_id, status, value, notes } = args;
+    
+    try {
+      const opportunityData = {
+        name,
+        pipelineId: pipeline_id,
+        stageId: stage_id,
+        status: status || 'open',
+        monetary: value ? { value } : undefined,
+        notes
+      };
+      
+      const result = await this.ghlService.createOpportunity(contact_id, opportunityData);
+      
+      return {
+        success: true,
+        opportunity_id: result.id,
+        message: 'Opportunity created successfully'
+      };
+    } catch (error) {
+      console.error('Error in handleGhlCreateOpportunity:', error);
+      throw new Error(`Failed to create opportunity: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  // Handle GHL create appointment function
+  private async handleGhlCreateAppointment(args: Record<string, any>, context: FunctionContext): Promise<any> {
+    if (!this.ghlService) {
+      throw new Error('GHL service is not initialized');
+    }
+    
+    const { contact_id, title, description, start_time, end_time, calendar_id } = args;
+    
+    try {
+      const appointmentData = {
+        title,
+        description,
+        startTime: start_time,
+        endTime: end_time,
+        calendarId: calendar_id
+      };
+      
+      const result = await this.ghlService.createAppointment(contact_id, appointmentData);
+      
+      return {
+        success: true,
+        appointment_id: result.id,
+        message: 'Appointment created successfully'
+      };
+    } catch (error) {
+      console.error('Error in handleGhlCreateAppointment:', error);
+      throw new Error(`Failed to create appointment: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }
