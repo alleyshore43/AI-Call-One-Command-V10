@@ -3,7 +3,7 @@ import { CloseEvent, ErrorEvent, MessageEvent, WebSocket } from 'ws';
 
 export class GeminiLiveClient {
 
-    private static readonly DEFAULT_GEMINI_BIDI_SERVER = 'wss://generativelanguage.googleapis.com/v1beta/models';
+    private static readonly DEFAULT_GEMINI_BIDI_SERVER = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
 
     private socket!: WebSocket;
     public isReady: boolean = false;
@@ -27,9 +27,8 @@ export class GeminiLiveClient {
         const baseUrl = server?.url || GeminiLiveClient.DEFAULT_GEMINI_BIDI_SERVER;
         const queryParams = server?.apiKey ? `key=${server.apiKey}` : '';
 
-        // **FIX**: Correctly format the model name and construct the WebSocket URL.
-        const modelName = (this.options.setup.model || this.options.primaryModel || "").replace("models/", "");
-        const url = `${baseUrl}/${modelName}:bidiGenerateContent?${queryParams}`;
+        // Use the correct WebSocket URL format
+        const url = `${baseUrl}?${queryParams}`;
         this.socket = new WebSocket(url);
 
         this.socket.onopen = this.sendSetup.bind(this);

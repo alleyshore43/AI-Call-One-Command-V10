@@ -98,7 +98,7 @@ class AudioConverter {
         }
     }
 }
-import { AudioTrigger } from './utils/audio-trigger.js';
+
 import { createServer as createHttpServer } from 'http';
 import { createClient } from '@supabase/supabase-js';
 import { exec } from 'child_process';
@@ -138,24 +138,12 @@ class Tw2GemServer extends TwilioWebSocketServer {
         this.geminiOptions = options.geminiOptions;
         this.geminiLive = new GeminiLiveEvents();
         this.audioConverter = new AudioConverter();
-        this.audioTrigger = new AudioTrigger();
-        this.initializeAudioTrigger();
+
         this.setupEventHandlers();
     }
 
-    async initializeAudioTrigger() {
-        console.log('🎵 Initializing audio trigger system...');
-        try {
-            const success = await this.audioTrigger.initialize();
-            if (success) {
-                console.log('✅ Audio trigger system ready');
-            } else {
-                console.log('⚠️ Audio trigger system failed to initialize');
-            }
-        } catch (error) {
-            console.error('❌ Error initializing audio trigger:', error.message);
-        }
-    }
+
+
 
     setupEventHandlers() {
         this.on('connection', (socket, request) => {
@@ -176,19 +164,12 @@ class Tw2GemServer extends TwilioWebSocketServer {
             geminiClient.onReady = () => {
                 console.log('🤖 Gemini Live client connected and ready');
                 
-                // Send audio trigger to make Gemini speak first
-                console.log('🎤 Sending audio trigger to Gemini...');
-                try {
-                    this.audioTrigger.sendTriggerToGemini(geminiClient);
-                } catch (error) {
-                    console.error('❌ Failed to send audio trigger:', error.message);
-                    // Fallback: send text prompt
-                    console.log('🔄 Sending fallback text prompt...');
-                    geminiClient.sendMessage({
-                        type: 'text',
-                        text: 'Hello! Thank you for calling. How can I help you today?'
-                    });
-                }
+                // Send initial greeting to start the conversation
+                console.log('🔄 Sending initial greeting...');
+                geminiClient.sendMessage({
+                    type: 'text',
+                    text: 'Hello! Thank you for calling. How can I help you today?'
+                });
             };
             
             geminiClient.onError = (error) => {
@@ -419,40 +400,8 @@ server.geminiLive.onReady = (socket) => {
     
     const selectedAgent = socket.selectedAgent || activeCallAgents.get(socket.twilioStreamSid);
     
-    // CRITICAL: Send audio trigger immediately to make Gemini speak first
-    // This is required for Gemini Live API audio modality
-    if (socket.geminiLive && socket.geminiLive.readyState === 1) {
-        console.log('🎵 Sending audio trigger to initiate Gemini speech...');
-        
-        // Send the pre-converted PCM audio trigger
-        try {
-            const fs = require('fs');
-            const triggerAudio = fs.readFileSync('./assets/trigger-audio.pcm');
-            const base64Audio = triggerAudio.toString('base64');
-            
-            socket.geminiLive.sendRealtimeInput({
-                mediaChunks: [{
-                    mimeType: 'audio/pcm',
-                    data: base64Audio
-                }]
-            });
-            
-            console.log('✅ Audio trigger sent successfully');
-        } catch (error) {
-            console.error('❌ Failed to send audio trigger:', error);
-            
-            // Fallback: send a minimal audio signal
-            const silentAudio = Buffer.alloc(1600, 0); // 0.1 seconds of silence at 16kHz
-            const base64Silent = silentAudio.toString('base64');
-            
-            socket.geminiLive.sendRealtimeInput({
-                mediaChunks: [{
-                    mimeType: 'audio/pcm',
-                    data: base64Silent
-                }]
-            });
-        }
-    }
+    // No need to send audio trigger - we'll use a text prompt instead
+    console.log('🤖 Gemini Live connection is ready to receive input');
     
     // Send initial greeting instruction after audio trigger
     setTimeout(() => {
@@ -464,12 +413,12 @@ server.geminiLive.onReady = (socket) => {
             }
             
             const initialMessage = {
-                client_content: {
+                clientContent: {
                     turns: [{
                         role: 'user',
                         parts: [{ text: greetingPrompt }]
                     }],
-                    turn_complete: true
+                    turnComplete: true
                 }
             };
             socket.geminiLive.send(JSON.stringify(initialMessage));
@@ -507,7 +456,7 @@ server.onClose = (socket, event) => {
 import twilio from 'twilio';
 import { AgentRoutingService } from './agent-routing-service.js';
 
-const WEBHOOK_URL = `https://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev`;
+const WEBHOOK_URL = process.env.WEBHOOK_URL || `https://work-2-jgeklehodwtesuya.prod-runtime.all-hands.dev`;
 
 // Initialize agent routing service
 const agentRouter = new AgentRoutingService();
@@ -587,7 +536,7 @@ app.post('/webhook/voice', async (req, res) => {
         const twiml = new twilio.twiml.VoiceResponse();
         const start = twiml.start();
         start.stream({
-            url: `wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev`,
+            url: process.env.WEBHOOK_URL ? `wss://${process.env.WEBHOOK_URL.replace('https://', '')}` : `wss://work-2-jgeklehodwtesuya.prod-runtime.all-hands.dev`,
             track: 'both_tracks'
         });
         
@@ -628,7 +577,7 @@ app.get('/test/twilio', async (req, res) => {
                 account_sid: account.sid,
                 account_status: account.status,
                 webhook_url: `${WEBHOOK_URL}/webhook/voice`,
-                stream_url: `wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev`
+                stream_url: `wss://work-2-jgeklehodwtesuya.prod-runtime.all-hands.dev`
             }
         });
     } catch (error) {
@@ -714,7 +663,7 @@ app.get('/test/system', async (req, res) => {
                 status: 'pass',
                 account_status: account.status,
                 webhook_url: `${WEBHOOK_URL}/webhook/voice`,
-                stream_url: `wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev`
+                stream_url: `wss://work-2-jgeklehodwtesuya.prod-runtime.all-hands.dev`
             };
         } else {
             results.tests.twilio = {
@@ -768,7 +717,7 @@ app.get('/test/system', async (req, res) => {
         results.tests.websocket = {
             status: 'pass',
             port: PORT,
-            url: `wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev:${PORT}`,
+            url: `wss://work-2-jgeklehodwtesuya.prod-runtime.all-hands.dev:${PORT}`,
             message: 'Ready for Twilio streams'
         };
     } catch (error) {
@@ -1548,7 +1497,7 @@ httpServer.listen(PORT, '0.0.0.0', () => {
     console.log('🚀 Starting AI Calling Backend Server...');
     console.log(`📞 TW2GEM Server running on port ${PORT}`);
     console.log(`🔗 Twilio webhook URL: ${WEBHOOK_URL}/webhook/voice`);
-    console.log(`🎵 Twilio stream URL: wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev`);
+    console.log(`🎵 Twilio stream URL: wss://work-2-jgeklehodwtesuya.prod-runtime.all-hands.dev`);
     console.log(`🤖 Gemini API: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
     console.log(`🏥 Health check: ${WEBHOOK_URL}/health`);
     console.log(`🧪 System tests: ${WEBHOOK_URL}/test/system`);
