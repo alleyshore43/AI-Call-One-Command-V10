@@ -483,8 +483,30 @@ app.post('/webhook/voice', async (req, res) => {
                 
             case 'play_ivr':
                 console.log('🎵 Playing IVR menu');
-                // Implement IVR logic here
-                // Fall through to connect_ai for now
+                if (routing.menu && routing.menu.greeting_text) {
+                    // Play greeting and gather digits
+                    twiml.say({
+                        voice: 'Polly.Joanna',
+                        language: selectedAgent.language_code || 'en-US'
+                    }, routing.menu.greeting_text);
+                    
+                    // Gather digits
+                    const gather = twiml.gather({
+                        numDigits: 1,
+                        action: `/webhook/ivr-selection?agent_id=${selectedAgent.id}&call_sid=${req.body.CallSid}`,
+                        method: 'POST',
+                        timeout: 5
+                    });
+                    
+                    // Add a fallback if no input is received
+                    twiml.redirect({
+                        method: 'POST'
+                    }, `/webhook/ivr-fallback?agent_id=${selectedAgent.id}&call_sid=${req.body.CallSid}`);
+                } else {
+                    console.log('⚠️ No IVR menu configured, falling back to direct connection');
+                    // Fall through to connect_ai
+                }
+                break;
                 
             case 'connect_ai':
             default:
@@ -535,6 +557,386 @@ app.post('/webhook/voice', async (req, res) => {
 app.post('/webhook/status', (req, res) => {
     console.log('📊 Call status update:', req.body);
     res.sendStatus(200);
+});
+
+// Twilio webhook for IVR selection
+app.post('/webhook/ivr-selection', async (req, res) => {
+    console.log('🔢 IVR selection webhook:', req.body);
+    
+    try {
+        const { agent_id, call_sid } = req.query;
+        const digit = req.body.Digits;
+        
+        console.log(`🔢 Caller pressed ${digit} for agent ${agent_id}`);
+        
+        // Get the IVR menu options for this agent
+        const { data: agent, error: agentError } = await supabase
+            .from('ai_agents')
+            .select('*')
+            .eq('id', agent_id)
+            .single();
+            
+        if (agentError) {
+            console.error('❌ Error fetching agent:', agentError);
+            throw new Error('Agent not found');
+        }
+        
+        // Get the IVR menu for this agent
+        const { data: ivrMenu, error: ivrMenuError } = await supabase
+            .from('ivr_menus')
+            .select('*, ivr_options(*)')
+            .eq('id', agent.ivr_menu_id)
+            .single();
+            
+        if (ivrMenuError) {
+            console.error('❌ Error fetching IVR menu:', ivrMenuError);
+            throw new Error('IVR menu not found');
+        }
+        
+        // Find the selected option
+        const selectedOption = ivrMenu.ivr_options.find(option => option.digit === digit);
+        
+        if (!selectedOption) {
+            console.log(`⚠️ Invalid selection: ${digit}`);
+            
+            // Handle invalid selection
+            const twiml = new twilio.twiml.VoiceResponse();
+            twiml.say({
+                voice: 'Polly.Joanna',
+                language: agent.language_code || 'en-US'
+            }, 'Sorry, that\'s not a valid option. Let\'s try again.');
+            
+            // Redirect back to the main IVR menu
+            twiml.redirect({
+                method: 'POST'
+            }, `/webhook/voice?agent_id=${agent_id}`);
+            
+            res.type('text/xml');
+            return res.send(twiml.toString());
+        }
+        
+        // Handle the selected option
+        console.log(`✅ Selected option: ${selectedOption.description}`);
+        
+        // Get the target agent for this option
+        const targetAgentId = selectedOption.agent_id;
+        
+        if (!targetAgentId) {
+            console.error('❌ No target agent specified for this option');
+            throw new Error('No target agent specified');
+        }
+        
+        // Get the target agent
+        const { data: targetAgent, error: targetAgentError } = await supabase
+            .from('ai_agents')
+            .select('*')
+            .eq('id', targetAgentId)
+            .single();
+            
+        if (targetAgentError) {
+            console.error('❌ Error fetching target agent:', targetAgentError);
+            throw new Error('Target agent not found');
+        }
+        
+        // Store the selected agent for this call
+        activeCallAgents.set(call_sid, targetAgent);
+        
+        // Connect to the selected agent
+        const twiml = new twilio.twiml.VoiceResponse();
+        
+        // Start a stream to capture audio
+        const start = twiml.start();
+        start.stream({
+            url: process.env.WEBHOOK_URL ? `wss://${process.env.WEBHOOK_URL.replace('https://', '')}` : `wss://work-2-pxyrgovifxspwgkg.prod-runtime.all-hands.dev`,
+            track: 'both_tracks'
+        });
+        
+        // Keep the call alive
+        twiml.pause({ length: 60 });
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+        
+        // Log the routing decision
+        await agentRouter.logCallRouting(
+            call_sid, 
+            targetAgent.id, 
+            'ivr_selection'
+        );
+        
+    } catch (error) {
+        console.error('❌ Error in IVR selection:', error);
+        
+        // Fallback to default response
+        const twiml = new twilio.twiml.VoiceResponse();
+        twiml.say({
+            voice: 'Polly.Joanna',
+            language: 'en-US'
+        }, 'Sorry, we encountered an error. Please try your call again later.');
+        twiml.hangup();
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+    }
+});
+
+// Twilio webhook for IVR fallback (when no digit is pressed)
+app.post('/webhook/ivr-fallback', async (req, res) => {
+    console.log('⚠️ IVR fallback webhook:', req.body);
+    
+    try {
+        const { agent_id, call_sid } = req.query;
+        
+        // Get the agent
+        const { data: agent, error: agentError } = await supabase
+            .from('ai_agents')
+            .select('*')
+            .eq('id', agent_id)
+            .single();
+            
+        if (agentError) {
+            console.error('❌ Error fetching agent:', agentError);
+            throw new Error('Agent not found');
+        }
+        
+        // Connect directly to the main agent as fallback
+        const twiml = new twilio.twiml.VoiceResponse();
+        
+        twiml.say({
+            voice: 'Polly.Joanna',
+            language: agent.language_code || 'en-US'
+        }, 'I didn\'t receive any input. Connecting you to our general assistant.');
+        
+        // Start a stream to capture audio
+        const start = twiml.start();
+        start.stream({
+            url: process.env.WEBHOOK_URL ? `wss://${process.env.WEBHOOK_URL.replace('https://', '')}` : `wss://work-2-pxyrgovifxspwgkg.prod-runtime.all-hands.dev`,
+            track: 'both_tracks'
+        });
+        
+        // Keep the call alive
+        twiml.pause({ length: 60 });
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+        
+    } catch (error) {
+        console.error('❌ Error in IVR fallback:', error);
+        
+        // Fallback to default response
+        const twiml = new twilio.twiml.VoiceResponse();
+        twiml.say({
+            voice: 'Polly.Joanna',
+            language: 'en-US'
+        }, 'Sorry, we encountered an error. Please try your call again later.');
+        twiml.hangup();
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+    }
+});
+
+// IVR Menu API endpoints
+app.get('/api/ivr-menus', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('ivr_menus')
+            .select('*')
+            .order('created_at', { ascending: false });
+            
+        if (error) {
+            console.error('Error fetching IVR menus:', error);
+            return res.status(500).json({ error: 'Failed to fetch IVR menus' });
+        }
+        
+        res.json(data);
+    } catch (error) {
+        console.error('Error in get IVR menus API:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.get('/api/ivr-menus/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const { data, error } = await supabase
+            .from('ivr_menus')
+            .select('*, ivr_options(*)')
+            .eq('id', id)
+            .single();
+            
+        if (error) {
+            console.error('Error fetching IVR menu:', error);
+            return res.status(500).json({ error: 'Failed to fetch IVR menu' });
+        }
+        
+        res.json(data);
+    } catch (error) {
+        console.error('Error in get IVR menu API:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/ivr-menus', async (req, res) => {
+    try {
+        const menuData = req.body;
+        
+        const { data, error } = await supabase
+            .from('ivr_menus')
+            .insert([{
+                ...menuData,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            }])
+            .select()
+            .single();
+            
+        if (error) {
+            console.error('Error creating IVR menu:', error);
+            return res.status(500).json({ error: 'Failed to create IVR menu' });
+        }
+        
+        res.status(201).json(data);
+    } catch (error) {
+        console.error('Error in create IVR menu API:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.put('/api/ivr-menus/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const menuData = req.body;
+        
+        const { data, error } = await supabase
+            .from('ivr_menus')
+            .update({
+                ...menuData,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select()
+            .single();
+            
+        if (error) {
+            console.error('Error updating IVR menu:', error);
+            return res.status(500).json({ error: 'Failed to update IVR menu' });
+        }
+        
+        res.json(data);
+    } catch (error) {
+        console.error('Error in update IVR menu API:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.delete('/api/ivr-menus/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // First delete all options associated with this menu
+        const { error: optionsError } = await supabase
+            .from('ivr_options')
+            .delete()
+            .eq('ivr_menu_id', id);
+            
+        if (optionsError) {
+            console.error('Error deleting IVR options:', optionsError);
+            return res.status(500).json({ error: 'Failed to delete IVR options' });
+        }
+        
+        // Then delete the menu itself
+        const { error } = await supabase
+            .from('ivr_menus')
+            .delete()
+            .eq('id', id);
+            
+        if (error) {
+            console.error('Error deleting IVR menu:', error);
+            return res.status(500).json({ error: 'Failed to delete IVR menu' });
+        }
+        
+        res.status(204).send();
+    } catch (error) {
+        console.error('Error in delete IVR menu API:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// IVR Options API endpoints
+app.post('/api/ivr-options', async (req, res) => {
+    try {
+        const optionData = req.body;
+        
+        const { data, error } = await supabase
+            .from('ivr_options')
+            .insert([{
+                ...optionData,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            }])
+            .select()
+            .single();
+            
+        if (error) {
+            console.error('Error creating IVR option:', error);
+            return res.status(500).json({ error: 'Failed to create IVR option' });
+        }
+        
+        res.status(201).json(data);
+    } catch (error) {
+        console.error('Error in create IVR option API:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.put('/api/ivr-options/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const optionData = req.body;
+        
+        const { data, error } = await supabase
+            .from('ivr_options')
+            .update({
+                ...optionData,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select()
+            .single();
+            
+        if (error) {
+            console.error('Error updating IVR option:', error);
+            return res.status(500).json({ error: 'Failed to update IVR option' });
+        }
+        
+        res.json(data);
+    } catch (error) {
+        console.error('Error in update IVR option API:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.delete('/api/ivr-options/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const { error } = await supabase
+            .from('ivr_options')
+            .delete()
+            .eq('id', id);
+            
+        if (error) {
+            console.error('Error deleting IVR option:', error);
+            return res.status(500).json({ error: 'Failed to delete IVR option' });
+        }
+        
+        res.status(204).send();
+    } catch (error) {
+        console.error('Error in delete IVR option API:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // Test endpoint for Twilio integration
