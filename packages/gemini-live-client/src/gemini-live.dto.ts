@@ -34,6 +34,8 @@ export interface BidiRequest {
 export interface GeminiLiveClientOptions {
     server: GeminiServer;
     setup: BidiGenerateContentSetup;
+    primaryModel?: string;
+    fallbackModel?: string;
 }
 
 export interface GeminiServer {

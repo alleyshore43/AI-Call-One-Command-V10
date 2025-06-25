@@ -185,7 +185,9 @@ TWILIO_AUTH_TOKEN=your_twilio_auth_token
 TWILIO_PHONE_NUMBER=your_twilio_phone_number
 
 # Gemini AI Configuration
-GEMINI_API_KEY=your_gemini_api_key
+GEMINI_API_KEY=AIzaSyBVhDmcM6rJdCY8PPEup5kjplIT0SaWVc4
+GEMINI_PRIMARY_MODEL=gemini-2.0-flash-exp
+GEMINI_FALLBACK_MODEL=gemini-2.0-flash-exp
 
 # Supabase Configuration
 SUPABASE_URL=your_supabase_url
@@ -300,8 +302,8 @@ echo "Agent Routing Test: http://localhost:12001/api/agents/route-test"
 echo ""
 echo "📞 Twilio Webhook Configuration:"
 echo "==============================="
-echo "Voice Webhook URL: https://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev/webhook/voice"
-echo "Stream URL: wss://work-2-yuqorkzrfvllndny.prod-runtime.all-hands.dev"
+echo "Voice Webhook URL: https://work-2-bsdyxgpeckswizwe.prod-runtime.all-hands.dev/webhook/voice"
+echo "Stream URL: wss://work-2-bsdyxgpeckswizwe.prod-runtime.all-hands.dev"
 echo ""
 echo "Note: These URLs are configured for your current environment"
 
