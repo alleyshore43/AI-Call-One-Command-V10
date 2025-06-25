@@ -1,5 +1,11 @@
 import { TwilioWebSocketServer } from './packages/twilio-server/dist/index.js';
 import { GeminiLiveClient } from './packages/gemini-live-client/dist/index.js';
+import { FunctionCallHandler } from './packages/tw2gem-server/src/function-handler.js';
+import express from 'express';
+import cors from 'cors';
+import { createServer as createHttpServer } from 'http';
+import { WebSocketServer } from 'ws';
+import { createClient } from '@supabase/supabase-js';
 // Create a simple AudioConverter class directly in this file
 class AudioConverter {
     static base64ToUint8Array(base64) {
@@ -240,6 +246,11 @@ class Tw2GemServer extends TwilioWebSocketServer {
                         socket.send(JSON.stringify(audioMessage));
                         console.log('🎵 Sent audio to Twilio, payload length:', twilioAudio.length);
                     }
+                    
+                    // Handle function calls
+                    if (part.functionCall) {
+                        this.handleFunctionCall(socket, part.functionCall);
+                    }
                 }
             }
             
@@ -255,6 +266,56 @@ class Tw2GemServer extends TwilioWebSocketServer {
             console.error('❌ Error handling Gemini response:', error);
         }
     }
+    
+    // Handle function calls from Gemini
+    async handleFunctionCall(socket, functionCall) {
+        try {
+            const { name, args } = functionCall;
+            console.log(`🔧 Function call from Gemini: ${name}`, args);
+            
+            // Get the agent ID from the socket
+            const agentId = socket.agentId;
+            if (!agentId) {
+                console.error('❌ No agent ID found for function call');
+                return;
+            }
+            
+            // Create a unique call ID
+            const callId = `call-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            
+            // Create a function call handler
+            const functionHandler = new FunctionCallHandler(
+                process.env.SUPABASE_URL || 'https://wllyticlzvtsimgefsti.supabase.co',
+                process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsbHl0aWNsenZ0c2ltZ2Vmc3RpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTYxMDQxNiwiZXhwIjoyMDY1MTg2NDE2fQ.ffz0OVDEY8s2n_Qar0IlRig0G16zH9BAG5EyHZZyaWA'
+            );
+            
+            // Load Zapier integrations for this agent
+            await functionHandler.loadZapierIntegrations(agentId);
+            
+            // Execute the function
+            const response = await functionHandler.executeFunction({
+                name,
+                args,
+                callId,
+                agentId
+            });
+            
+            console.log(`🔧 Function response: ${name}`, response);
+            
+            // Send the function response back to Gemini
+            socket.geminiLive.sendFunctionResponse(name, response.result || response.error);
+            
+        } catch (error) {
+            console.error('❌ Error handling function call:', error);
+            
+            // Send error response back to Gemini
+            if (functionCall && functionCall.name) {
+                socket.geminiLive.sendFunctionResponse(functionCall.name, {
+                    error: error.message || 'Unknown error occurred'
+                });
+            }
+        }
+    }
 
     handleTwilioMessage(socket, message) {
         switch (message.event) {
@@ -265,6 +326,12 @@ class Tw2GemServer extends TwilioWebSocketServer {
             case 'start':
                 console.log('🎬 Call started:', message.start?.streamSid);
                 socket.twilioStreamSid = message.start?.streamSid;
+                
+                // Store the agent ID in the socket if available
+                if (message.start?.customParameters?.agent_id) {
+                    socket.agentId = message.start.customParameters.agent_id;
+                    console.log(`🤖 Agent ID for this call: ${socket.agentId}`);
+                }
                 
                 // Gemini Live client connects automatically in constructor
                 console.log('🤖 Gemini Live client ready for audio');
@@ -325,6 +392,146 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Create Supabase client
+const supabase = createClient(
+    process.env.SUPABASE_URL || 'https://wllyticlzvtsimgefsti.supabase.co',
+    process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsbHl0aWNsenZ0c2ltZ2Vmc3RpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTYxMDQxNiwiZXhwIjoyMDY1MTg2NDE2fQ.ffz0OVDEY8s2n_Qar0IlRig0G16zH9BAG5EyHZZyaWA'
+);
+
+// API endpoints for Zapier integrations
+app.get('/api/agents/:agentId/zaps', async (req, res) => {
+    try {
+        const { agentId } = req.params;
+        
+        const { data, error } = await supabase
+            .from('agent_zaps')
+            .select('*')
+            .eq('agent_id', agentId);
+            
+        if (error) {
+            console.error('Error fetching Zapier integrations:', error);
+            return res.status(500).json({ error: error.message });
+        }
+        
+        res.json(data);
+    } catch (err) {
+        console.error('Error in GET /api/agents/:agentId/zaps:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/agents/:agentId/zaps', async (req, res) => {
+    try {
+        const { agentId } = req.params;
+        const { name, description, webhook_url, parameter_schema } = req.body;
+        
+        // Validate required fields
+        if (!name || !description || !webhook_url || !parameter_schema) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+        
+        const { data, error } = await supabase
+            .from('agent_zaps')
+            .insert({
+                agent_id: agentId,
+                name,
+                description,
+                webhook_url,
+                parameter_schema
+            })
+            .select()
+            .single();
+            
+        if (error) {
+            console.error('Error creating Zapier integration:', error);
+            return res.status(500).json({ error: error.message });
+        }
+        
+        res.status(201).json(data);
+    } catch (err) {
+        console.error('Error in POST /api/agents/:agentId/zaps:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/zaps/:zapId', async (req, res) => {
+    try {
+        const { zapId } = req.params;
+        
+        const { data, error } = await supabase
+            .from('agent_zaps')
+            .select('*')
+            .eq('id', zapId)
+            .single();
+            
+        if (error) {
+            console.error('Error fetching Zapier integration:', error);
+            return res.status(404).json({ error: 'Zapier integration not found' });
+        }
+        
+        res.json(data);
+    } catch (err) {
+        console.error('Error in GET /api/zaps/:zapId:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/zaps/:zapId', async (req, res) => {
+    try {
+        const { zapId } = req.params;
+        const { name, description, webhook_url, parameter_schema } = req.body;
+        
+        // Validate required fields
+        if (!name || !description || !webhook_url || !parameter_schema) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+        
+        const { data, error } = await supabase
+            .from('agent_zaps')
+            .update({
+                name,
+                description,
+                webhook_url,
+                parameter_schema,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', zapId)
+            .select()
+            .single();
+            
+        if (error) {
+            console.error('Error updating Zapier integration:', error);
+            return res.status(500).json({ error: error.message });
+        }
+        
+        res.json(data);
+    } catch (err) {
+        console.error('Error in PUT /api/zaps/:zapId:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/zaps/:zapId', async (req, res) => {
+    try {
+        const { zapId } = req.params;
+        
+        const { error } = await supabase
+            .from('agent_zaps')
+            .delete()
+            .eq('id', zapId);
+            
+        if (error) {
+            console.error('Error deleting Zapier integration:', error);
+            return res.status(500).json({ error: error.message });
+        }
+        
+        res.status(204).end();
+    } catch (err) {
+        console.error('Error in DELETE /api/zaps/:zapId:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 const httpServer = createHttpServer(app);
 
@@ -1190,6 +1397,216 @@ app.delete('/api/zapier/webhooks/:id', async (req, res) => {
     } catch (error) {
         console.error('Error deleting Zapier webhook:', error);
         res.status(500).json({ error: 'Failed to delete webhook' });
+    }
+});
+
+// Agent Zapier integrations endpoints
+app.get('/api/agents/:agentId/zaps', async (req, res) => {
+    try {
+        const { agentId } = req.params;
+        
+        // Validate agent ID
+        const { data: agent, error: agentError } = await supabase
+            .from('ai_agents')
+            .select('id')
+            .eq('id', agentId)
+            .single();
+            
+        if (agentError || !agent) {
+            return res.status(404).json({ error: 'Agent not found' });
+        }
+        
+        // Fetch Zapier integrations for this agent
+        const { data, error } = await supabase
+            .from('agent_zaps')
+            .select('*')
+            .eq('agent_id', agentId);
+            
+        if (error) {
+            console.error('Error fetching agent Zapier integrations:', error);
+            return res.status(500).json({ error: 'Failed to fetch Zapier integrations' });
+        }
+        
+        res.json(data || []);
+    } catch (err) {
+        console.error('Error in /api/agents/:agentId/zaps:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/agents/:agentId/zaps', async (req, res) => {
+    try {
+        const { agentId } = req.params;
+        const { name, description, webhook_url, parameter_schema } = req.body;
+        
+        // Validate required fields
+        if (!name || !description || !webhook_url || !parameter_schema) {
+            return res.status(400).json({ 
+                error: 'Missing required fields: name, description, webhook_url, and parameter_schema are required' 
+            });
+        }
+        
+        // Validate agent ID
+        const { data: agent, error: agentError } = await supabase
+            .from('ai_agents')
+            .select('id')
+            .eq('id', agentId)
+            .single();
+            
+        if (agentError || !agent) {
+            return res.status(404).json({ error: 'Agent not found' });
+        }
+        
+        // Check for duplicate name for this agent
+        const { data: existingZap, error: existingError } = await supabase
+            .from('agent_zaps')
+            .select('id')
+            .eq('agent_id', agentId)
+            .eq('name', name)
+            .maybeSingle();
+            
+        if (existingZap) {
+            return res.status(409).json({ error: 'A Zapier integration with this name already exists for this agent' });
+        }
+        
+        // Create new Zapier integration
+        const { data, error } = await supabase
+            .from('agent_zaps')
+            .insert([{
+                agent_id: agentId,
+                name,
+                description,
+                webhook_url,
+                parameter_schema
+            }])
+            .select();
+            
+        if (error) {
+            console.error('Error creating Zapier integration:', error);
+            return res.status(500).json({ error: 'Failed to create Zapier integration' });
+        }
+        
+        res.status(201).json(data[0]);
+    } catch (err) {
+        console.error('Error in POST /api/agents/:agentId/zaps:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.get('/api/zaps/:zapId', async (req, res) => {
+    try {
+        const { zapId } = req.params;
+        
+        const { data, error } = await supabase
+            .from('agent_zaps')
+            .select('*')
+            .eq('id', zapId)
+            .single();
+            
+        if (error || !data) {
+            return res.status(404).json({ error: 'Zapier integration not found' });
+        }
+        
+        res.json(data);
+    } catch (err) {
+        console.error('Error in GET /api/zaps/:zapId:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.put('/api/zaps/:zapId', async (req, res) => {
+    try {
+        const { zapId } = req.params;
+        const { name, description, webhook_url, parameter_schema } = req.body;
+        
+        // Validate required fields
+        if (!name || !description || !webhook_url || !parameter_schema) {
+            return res.status(400).json({ 
+                error: 'Missing required fields: name, description, webhook_url, and parameter_schema are required' 
+            });
+        }
+        
+        // Check if the Zap exists
+        const { data: existingZap, error: existingError } = await supabase
+            .from('agent_zaps')
+            .select('id, agent_id, name')
+            .eq('id', zapId)
+            .single();
+            
+        if (existingError || !existingZap) {
+            return res.status(404).json({ error: 'Zapier integration not found' });
+        }
+        
+        // Check for duplicate name for this agent (excluding the current Zap)
+        if (name !== existingZap.name) {
+            const { data: duplicateZap, error: duplicateError } = await supabase
+                .from('agent_zaps')
+                .select('id')
+                .eq('agent_id', existingZap.agent_id)
+                .eq('name', name)
+                .neq('id', zapId)
+                .maybeSingle();
+                
+            if (duplicateZap) {
+                return res.status(409).json({ error: 'A Zapier integration with this name already exists for this agent' });
+            }
+        }
+        
+        // Update the Zapier integration
+        const { data, error } = await supabase
+            .from('agent_zaps')
+            .update({
+                name,
+                description,
+                webhook_url,
+                parameter_schema,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', zapId)
+            .select();
+            
+        if (error) {
+            console.error('Error updating Zapier integration:', error);
+            return res.status(500).json({ error: 'Failed to update Zapier integration' });
+        }
+        
+        res.json(data[0]);
+    } catch (err) {
+        console.error('Error in PUT /api/zaps/:zapId:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.delete('/api/zaps/:zapId', async (req, res) => {
+    try {
+        const { zapId } = req.params;
+        
+        // Check if the Zap exists
+        const { data: existingZap, error: existingError } = await supabase
+            .from('agent_zaps')
+            .select('id')
+            .eq('id', zapId)
+            .single();
+            
+        if (existingError || !existingZap) {
+            return res.status(404).json({ error: 'Zapier integration not found' });
+        }
+        
+        // Delete the Zapier integration
+        const { error } = await supabase
+            .from('agent_zaps')
+            .delete()
+            .eq('id', zapId);
+            
+        if (error) {
+            console.error('Error deleting Zapier integration:', error);
+            return res.status(500).json({ error: 'Failed to delete Zapier integration' });
+        }
+        
+        res.status(204).send();
+    } catch (err) {
+        console.error('Error in DELETE /api/zaps/:zapId:', err);
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 

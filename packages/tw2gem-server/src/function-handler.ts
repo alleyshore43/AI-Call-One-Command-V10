@@ -1,5 +1,6 @@
 // import { DatabaseService } from '../../dashboard/src/services/database'
 import { createClient } from '@supabase/supabase-js';
+import axios from 'axios';
 
 export interface FunctionCallRequest {
   name: string
@@ -27,6 +28,8 @@ export interface FunctionDefinition {
   handler: (args: Record<string, any>, context: FunctionContext) => Promise<any>
   requiresAuth?: boolean
   permissions?: string[]
+  isZapier?: boolean
+  webhookUrl?: string
 }
 
 export interface FunctionContext {
@@ -34,11 +37,26 @@ export interface FunctionContext {
   userId?: string
   agentId?: string
   supabase?: any
+  functionName?: string
+}
+
+export interface ZapierIntegration {
+  id: string
+  agent_id: string
+  name: string
+  description: string
+  webhook_url: string
+  parameter_schema: {
+    type: 'object'
+    properties: Record<string, any>
+    required?: string[]
+  }
 }
 
 export class FunctionCallHandler {
   private functions: Map<string, FunctionDefinition> = new Map();
   private supabase: any;
+  private zapierIntegrations: Map<string, ZapierIntegration> = new Map();
 
   constructor(supabaseUrl?: string, supabaseKey?: string) {
     if (supabaseUrl && supabaseKey) {
@@ -46,11 +64,132 @@ export class FunctionCallHandler {
     }
     this.registerCoreFunctions();
   }
+  
+  // Load Zapier integrations for a specific agent
+  async loadZapierIntegrations(agentId: string): Promise<void> {
+    if (!this.supabase) {
+      console.warn('Supabase client not initialized, cannot load Zapier integrations');
+      return;
+    }
+    
+    try {
+      console.log(`Loading Zapier integrations for agent ${agentId}...`);
+      
+      // Clear any existing Zapier integrations for this agent
+      this.clearZapierIntegrations(agentId);
+      
+      // Fetch Zapier integrations from the database
+      const { data: zapierIntegrations, error } = await this.supabase
+        .from('agent_zaps')
+        .select('*')
+        .eq('agent_id', agentId);
+        
+      if (error) {
+        console.error('Error loading Zapier integrations:', error);
+        return;
+      }
+      
+      if (!zapierIntegrations || zapierIntegrations.length === 0) {
+        console.log(`No Zapier integrations found for agent ${agentId}`);
+        return;
+      }
+      
+      console.log(`Found ${zapierIntegrations.length} Zapier integrations for agent ${agentId}`);
+      
+      // Register each Zapier integration as a function
+      zapierIntegrations.forEach((integration: ZapierIntegration) => {
+        this.registerZapierFunction(integration);
+      });
+    } catch (error) {
+      console.error('Error in loadZapierIntegrations:', error);
+    }
+  }
+  
+  // Clear Zapier integrations for a specific agent
+  clearZapierIntegrations(agentId: string): void {
+    // Remove any existing Zapier functions for this agent
+    for (const [name, func] of this.functions.entries()) {
+      if (func.isZapier) {
+        const integration = this.zapierIntegrations.get(name);
+        if (integration && integration.agent_id === agentId) {
+          this.functions.delete(name);
+          this.zapierIntegrations.delete(name);
+          console.log(`Removed Zapier function: ${name}`);
+        }
+      }
+    }
+  }
 
   // Register a new function
   registerFunction(definition: FunctionDefinition) {
     this.functions.set(definition.name, definition);
     console.log(`Registered function: ${definition.name}`);
+  }
+  
+  // Register a Zapier function
+  registerZapierFunction(integration: ZapierIntegration) {
+    // Store the integration for reference
+    this.zapierIntegrations.set(integration.name, integration);
+    
+    // Create a function definition from the Zapier integration
+    const functionDef: FunctionDefinition = {
+      name: integration.name,
+      description: integration.description,
+      parameters: integration.parameter_schema,
+      isZapier: true,
+      webhookUrl: integration.webhook_url,
+      handler: this.handleZapierWebhook.bind(this)
+    };
+    
+    // Register the function
+    this.registerFunction(functionDef);
+  }
+  
+  // Handler for Zapier webhook calls
+  private async handleZapierWebhook(args: Record<string, any>, context: FunctionContext): Promise<any> {
+    try {
+      // Get the function name from the context
+      const functionName = context.functionName || '';
+      
+      // Get the Zapier integration
+      const integration = this.zapierIntegrations.get(functionName);
+      if (!integration) {
+        throw new Error(`Zapier integration '${functionName}' not found`);
+      }
+      
+      // Get the webhook URL
+      const webhookUrl = integration.webhook_url;
+      if (!webhookUrl) {
+        throw new Error(`Webhook URL not found for Zapier integration '${functionName}'`);
+      }
+      
+      console.log(`Executing Zapier webhook for ${functionName}:`, {
+        webhookUrl,
+        args
+      });
+      
+      // Send the request to Zapier
+      const response = await axios.post(webhookUrl, args, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log(`Zapier webhook response for ${functionName}:`, {
+        status: response.status,
+        data: response.data
+      });
+      
+      // Return a success message
+      return {
+        success: true,
+        message: `Successfully executed ${integration.name}`,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error executing Zapier webhook:', error);
+      throw error;
+    }
   }
 
   // Get all registered functions for Gemini setup
@@ -92,7 +231,8 @@ export class FunctionCallHandler {
         callId: request.callId,
         userId: request.userId,
         agentId: request.agentId,
-        supabase: this.supabase
+        supabase: this.supabase,
+        functionName: request.name // Add the function name to the context
       };
 
       // Execute the function

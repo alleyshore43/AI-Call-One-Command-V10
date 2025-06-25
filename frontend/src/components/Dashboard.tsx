@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   PhoneIcon, 
   MicrophoneIcon, 
@@ -18,15 +18,53 @@ import { usePermissions } from '../contexts/UserContext';
 import UsageTracker from './UsageTracker';
 import OutboundCampaigns from './OutboundCampaigns';
 import ZapierIntegration from './ZapierIntegration';
+import ZapierIntegrationManager from './ZapierIntegrationManager';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 
 interface DashboardProps {
   onLogout: () => void
 }
 
+interface Agent {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export default function Dashboard({ onLogout }: DashboardProps) {
   const [activeTab, setActiveTab] = useState('overview');
   const [serverStatus, setServerStatus] = useState<'running' | 'stopped'>('stopped');
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState('');
+  const [loading, setLoading] = useState(false);
   const { canUseInbound, canUseOutboundDialer } = usePermissions();
+  const supabase = useSupabaseClient();
+  
+  // Fetch agents when component mounts
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('agents')
+          .select('id, name, description')
+          .order('name');
+          
+        if (error) {
+          console.error('Error fetching agents:', error);
+          return;
+        }
+        
+        setAgents(data || []);
+      } catch (err) {
+        console.error('Error fetching agents:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchAgents();
+  }, [supabase]);
 
   const stats = [
     { name: 'Active Calls', value: '12', icon: PhoneIcon, color: 'text-green-500' },
@@ -273,7 +311,38 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {activeTab === 'outbound' && <OutboundCampaigns />}
 
         {/* Zapier Integration Tab */}
-        {activeTab === 'zapier' && <ZapierIntegration />}
+        {activeTab === 'zapier' && (
+          <div className="space-y-6">
+            <ZapierIntegration />
+            
+            {/* Agent-specific Zapier integrations */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Agent Zapier Integrations</h3>
+              <p className="text-slate-600 mb-4">
+                Connect your AI agents directly to Zapier workflows. These integrations allow your agents to trigger actions during calls.
+              </p>
+              
+              {/* Agent selector */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Select Agent
+                </label>
+                <select 
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onChange={(e) => setSelectedAgentId(e.target.value)}
+                  value={selectedAgentId}
+                >
+                  <option value="">Select an agent</option>
+                  {agents.map(agent => (
+                    <option key={agent.id} value={agent.id}>{agent.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {selectedAgentId && <ZapierIntegrationManager agentId={selectedAgentId} />}
+            </div>
+          </div>
+        )}
 
         {/* Recordings Tab */}
         {activeTab === 'recordings' && (
