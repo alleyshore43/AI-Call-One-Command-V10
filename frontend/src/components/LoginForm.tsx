@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { supabase } from '../lib/supabase';
-import { mockAuth } from '../lib/mockAuth';
 import toast from 'react-hot-toast';
 
 export default function LoginForm() {
@@ -17,37 +16,19 @@ export default function LoginForm() {
 
     try {
       if (isSignUp) {
-        // Try Supabase first, fallback to mock
-        try {
-          const { error } = await supabase.auth.signUp({
-            email,
-            password,
-          });
-          if (error) throw error;
-          toast.success('Check your email for the confirmation link!');
-        } catch (supabaseError) {
-          const { error } = await mockAuth.signUp({ email, password });
-          if (error) throw error;
-          toast.success('Account created! (Demo mode)');
-        }
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw error;
+        toast.success('Check your email for the confirmation link!');
       } else {
-        // Try Supabase first, fallback to mock
-        try {
-          const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
-          if (error) throw error;
-          toast.success('Welcome back!');
-        } catch (supabaseError) {
-          const { data, error } = await mockAuth.signInWithPassword({ email, password });
-          if (error) throw error;
-          if (data.user) {
-            toast.success('Welcome back! (Demo mode)');
-            // Trigger a page reload to update auth state
-            window.location.reload();
-          }
-        }
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        toast.success('Welcome back!');
       }
     } catch (error: any) {
       toast.error(error.message || 'Authentication failed');
@@ -71,35 +52,7 @@ export default function LoginForm() {
     }
   };
 
-  const handleDemoLogin = async () => {
-    setLoading(true);
-    try {
-      // Try Supabase first, fallback to mock
-      try {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: 'demo@example.com',
-          password: 'demo123',
-        });
-        if (error) throw error;
-        toast.success('Demo login successful!');
-      } catch (supabaseError) {
-        const { data, error } = await mockAuth.signInWithPassword({
-          email: 'demo@example.com',
-          password: 'demo123',
-        });
-        if (error) throw error;
-        if (data.user) {
-          toast.success('Demo login successful! (Demo mode)');
-          // Trigger a page reload to update auth state
-          window.location.reload();
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Demo login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
@@ -213,20 +166,7 @@ export default function LoginForm() {
               </button>
             </div>
 
-            {/* Demo Login */}
-            <div className="border-t border-gray-600 pt-6">
-              <button
-                type="button"
-                onClick={handleDemoLogin}
-                disabled={loading}
-                className="w-full flex justify-center py-2 px-4 border border-gray-600 text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-              >
-                Try Demo Account
-              </button>
-              <p className="mt-2 text-xs text-gray-400 text-center">
-                Email: demo@example.com • Password: demo123
-              </p>
-            </div>
+
           </form>
         </div>
 
