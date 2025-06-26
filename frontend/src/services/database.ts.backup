@@ -18,8 +18,18 @@ import type {
 } from '../lib/supabase';
 
 export class DatabaseService {
+  // Check if we're in demo mode
+  static isDemoMode(): boolean {
+    // Get the current mode from localStorage (set by AppContext)
+    const appMode = localStorage.getItem('app_mode');
+    return appMode === 'demo';
+  }
+
   // Profile operations
   static async getProfile(userId: string): Promise<Profile | null> {
+    if (this.isDemoMode()) {
+      return this.getDemoProfile(userId);
+    }
 
     const { data, error } = await supabase
       .from('profiles')
@@ -36,6 +46,10 @@ export class DatabaseService {
   }
 
   static async updateProfile(userId: string, updates: Partial<Profile>): Promise<Profile | null> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: Profile update simulated');
+      return { ...this.getDemoProfile(userId), ...updates };
+    }
 
     const { data, error } = await supabase
       .from('profiles')
@@ -53,6 +67,13 @@ export class DatabaseService {
   }
 
   static async getUserSettings(userId: string): Promise<any> {
+    if (this.isDemoMode()) {
+      return {
+        twilio_phone_number: '+18553947135',
+        twilio_account_sid: 'demo_sid',
+        gemini_api_key: 'demo_key'
+      };
+    }
 
     const profile = await this.getProfile(userId);
     return {
@@ -64,6 +85,9 @@ export class DatabaseService {
 
   // AI Agents operations
   static async getAIAgents(profileId: string): Promise<AIAgent[]> {
+    if (this.isDemoMode()) {
+      return this.getDemoAgents();
+    }
 
     const { data, error } = await supabase
       .from('ai_agents')
@@ -81,6 +105,15 @@ export class DatabaseService {
   }
 
   static async createAIAgent(agent: Omit<AIAgent, 'id' | 'created_at' | 'updated_at'>): Promise<AIAgent | null> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: AI agent creation simulated');
+      return {
+        ...agent,
+        id: 'demo-agent-' + Date.now(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+    }
 
     const { data, error } = await supabase
       .from('ai_agents')
@@ -97,6 +130,10 @@ export class DatabaseService {
   }
 
   static async updateAIAgent(id: string, updates: Partial<AIAgent>): Promise<AIAgent | null> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: AI agent update simulated');
+      return null;
+    }
 
     const { data, error } = await supabase
       .from('ai_agents')
@@ -114,6 +151,10 @@ export class DatabaseService {
   }
 
   static async deleteAIAgent(id: string): Promise<boolean> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: AI agent deletion simulated');
+      return true;
+    }
 
     const { error } = await supabase
       .from('ai_agents')
@@ -130,6 +171,9 @@ export class DatabaseService {
 
   // Call logs operations
   static async getCallLogs(profileId: string, limit = 50, offset = 0): Promise<CallLog[]> {
+    if (this.isDemoMode()) {
+      return this.getDemoCallLogs();
+    }
 
     const { data, error } = await supabase
       .from('call_logs')
@@ -151,6 +195,9 @@ export class DatabaseService {
   }
 
   static async getActiveCallLogs(profileId: string): Promise<CallLog[]> {
+    if (this.isDemoMode()) {
+      return this.getDemoCallLogs().filter(call => call.status === 'in_progress');
+    }
 
     const { data, error } = await supabase
       .from('call_logs')
@@ -168,6 +215,10 @@ export class DatabaseService {
   }
 
   static async createCallLog(callLog: Omit<CallLog, 'id' | 'created_at'>): Promise<CallLog | null> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: Call log creation simulated');
+      return null;
+    }
 
     const { data, error } = await supabase
       .from('call_logs')
@@ -184,6 +235,10 @@ export class DatabaseService {
   }
 
   static async updateCallLog(id: string, updates: Partial<CallLog>): Promise<CallLog | null> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: Call log update simulated');
+      return null;
+    }
 
     const { data, error } = await supabase
       .from('call_logs')
@@ -202,6 +257,9 @@ export class DatabaseService {
 
   // Campaign operations
   static async getCampaigns(profileId: string): Promise<Campaign[]> {
+    if (this.isDemoMode()) {
+      return this.getDemoCampaigns();
+    }
 
     const { data, error } = await supabase
       .from('outbound_campaigns')
@@ -218,6 +276,10 @@ export class DatabaseService {
   }
 
   static async getCampaign(campaignId: string): Promise<Campaign | null> {
+    if (this.isDemoMode()) {
+      const campaigns = this.getDemoCampaigns();
+      return campaigns.find(c => c.id === campaignId) || null;
+    }
 
     const { data, error } = await supabase
       .from('outbound_campaigns')
@@ -234,6 +296,16 @@ export class DatabaseService {
   }
 
   static async createCampaign(campaign: Omit<Campaign, 'id' | 'created_at' | 'updated_at'>): Promise<Campaign | null> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: Campaign creation simulated');
+      // Return a mock campaign object instead of null to prevent frontend errors
+      return {
+        ...campaign,
+        id: 'demo-campaign-' + Date.now(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      } as Campaign;
+    }
 
     const { data, error } = await supabase
       .from('outbound_campaigns')
@@ -250,6 +322,10 @@ export class DatabaseService {
   }
 
   static async updateCampaign(id: string, updates: Partial<Campaign>): Promise<Campaign | null> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: Campaign update simulated');
+      return null;
+    }
 
     const { data, error } = await supabase
       .from('outbound_campaigns')
@@ -267,6 +343,10 @@ export class DatabaseService {
   }
 
   static async deleteCampaign(id: string): Promise<boolean> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: Campaign deletion simulated');
+      return true;
+    }
 
     const { error } = await supabase
       .from('outbound_campaigns')
@@ -285,6 +365,9 @@ export class DatabaseService {
   static async getCampaignLeads(campaignId: string, options: { limit?: number; offset?: number; status?: string[]; } = {}): Promise<CampaignLead[]> {
     const { limit = 100, offset = 0, status } = options;
     
+    if (this.isDemoMode()) {
+      return this.getDemoCampaignLeads();
+    }
 
     let query = supabase
       .from('campaign_leads')
@@ -312,6 +395,9 @@ export class DatabaseService {
 
   // Appointments operations
   static async getAppointments(profileId: string): Promise<Appointment[]> {
+    if (this.isDemoMode()) {
+      return this.getDemoAppointments();
+    }
 
     const { data, error } = await supabase
       .from('appointments')
@@ -328,6 +414,10 @@ export class DatabaseService {
   }
 
   static async createAppointment(appointment: Omit<Appointment, 'id' | 'created_at' | 'updated_at'>): Promise<Appointment | null> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: Appointment creation simulated');
+      return null;
+    }
 
     const { data, error } = await supabase
       .from('appointments')
@@ -344,6 +434,10 @@ export class DatabaseService {
   }
 
   static async updateAppointment(id: string, updates: Partial<Appointment>): Promise<Appointment | null> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: Appointment update simulated');
+      return null;
+    }
 
     const { data, error } = await supabase
       .from('appointments')
@@ -361,6 +455,10 @@ export class DatabaseService {
   }
 
   static async deleteAppointment(id: string): Promise<boolean> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: Appointment deletion simulated');
+      return true;
+    }
 
     const { error } = await supabase
       .from('appointments')
@@ -375,7 +473,14 @@ export class DatabaseService {
     return true;
   }
 
+
+
+
   static async toggleAgent(agentId: string, isActive: boolean): Promise<boolean> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: Agent toggle simulated');
+      return true;
+    }
 
     const { error } = await supabase
       .from('ai_agents')
@@ -392,6 +497,9 @@ export class DatabaseService {
 
   // Analytics operations
   static async getAnalytics(profileId: string): Promise<AnalyticsData> {
+    if (this.isDemoMode()) {
+      return this.getDemoAnalytics();
+    }
 
     try {
       // Get analytics using the database function
@@ -415,6 +523,9 @@ export class DatabaseService {
 
   // DNC operations
   static async getDNCEntries(profileId: string): Promise<DNCEntry[]> {
+    if (this.isDemoMode()) {
+      return [];
+    }
 
     const { data, error } = await supabase
       .from('dnc_lists')
@@ -431,6 +542,9 @@ export class DatabaseService {
   }
 
   static async addDNCEntry(entry: Omit<DNCEntry, 'id' | 'created_at'>): Promise<DNCEntry> {
+    if (this.isDemoMode()) {
+      throw new Error('DNC management not available in demo mode');
+    }
 
     const { data, error } = await supabase
       .from('dnc_lists')
@@ -447,6 +561,9 @@ export class DatabaseService {
   }
 
   static async deleteDNCEntry(id: string): Promise<boolean> {
+    if (this.isDemoMode()) {
+      throw new Error('DNC management not available in demo mode');
+    }
 
     const { error } = await supabase
       .from('dnc_lists')
@@ -463,6 +580,9 @@ export class DatabaseService {
 
   // Webhook operations
   static async getWebhookEndpoints(profileId: string): Promise<WebhookEndpoint[]> {
+    if (this.isDemoMode()) {
+      return [];
+    }
 
     const { data, error } = await supabase
       .from('webhook_endpoints')
@@ -479,6 +599,9 @@ export class DatabaseService {
   }
 
   static async getWebhookDeliveries(profileId: string): Promise<WebhookDelivery[]> {
+    if (this.isDemoMode()) {
+      return [];
+    }
 
     const { data, error } = await supabase
       .from('webhook_deliveries')
@@ -500,6 +623,9 @@ export class DatabaseService {
 
   // System status
   static async getSystemStatus(): Promise<SystemStatus[]> {
+    if (this.isDemoMode()) {
+      return this.getDemoSystemStatus();
+    }
 
     const { data, error } = await supabase
       .from('system_status')
@@ -851,12 +977,21 @@ export class DatabaseService {
     ];
   }
 
+
+
+
+
+
+
   // Additional helper methods
   static async getAllCallLogs(profileId: string): Promise<CallLog[]> {
     return this.getCallLogs(profileId, 1000, 0);
   }
 
   static async getSubscription(profileId: string): Promise<Subscription | null> {
+    if (this.isDemoMode()) {
+      return null;
+    }
 
     const { data, error } = await supabase
       .from('subscriptions')
@@ -873,6 +1008,9 @@ export class DatabaseService {
   }
 
   static async getUsageRecords(profileId: string): Promise<UsageRecord[]> {
+    if (this.isDemoMode()) {
+      return [];
+    }
 
     const { data, error } = await supabase
       .from('usage_records')
@@ -895,6 +1033,9 @@ export class DatabaseService {
   }
 
   static async cancelSubscription(subscriptionId: string): Promise<boolean> {
+    if (this.isDemoMode()) {
+      return true;
+    }
 
     const { error } = await supabase
       .from('subscriptions')
@@ -913,6 +1054,9 @@ export class DatabaseService {
   }
 
   static async createWebhookEndpoint(webhook: Omit<WebhookEndpoint, 'id' | 'created_at' | 'updated_at' | 'success_count' | 'failure_count'>): Promise<WebhookEndpoint> {
+    if (this.isDemoMode()) {
+      throw new Error('Webhook management not available in demo mode');
+    }
 
     const { data, error } = await supabase
       .from('webhook_endpoints')
@@ -933,6 +1077,9 @@ export class DatabaseService {
   }
 
   static async updateWebhookEndpoint(id: string, updates: Partial<WebhookEndpoint>): Promise<WebhookEndpoint> {
+    if (this.isDemoMode()) {
+      throw new Error('Webhook management not available in demo mode');
+    }
 
     const { data, error } = await supabase
       .from('webhook_endpoints')
@@ -953,6 +1100,9 @@ export class DatabaseService {
   }
 
   static async deleteWebhookEndpoint(id: string): Promise<boolean> {
+    if (this.isDemoMode()) {
+      throw new Error('Webhook management not available in demo mode');
+    }
 
     const { error } = await supabase
       .from('webhook_endpoints')
@@ -968,6 +1118,9 @@ export class DatabaseService {
   }
 
   static async testWebhookEndpoint(id: string): Promise<boolean> {
+    if (this.isDemoMode()) {
+      throw new Error('Webhook testing not available in demo mode');
+    }
 
     // In a real implementation, this would trigger a test webhook
     console.log('Testing webhook endpoint:', id);
@@ -975,6 +1128,9 @@ export class DatabaseService {
   }
 
   static async bulkAddDNCEntries(entries: Omit<DNCEntry, 'id' | 'created_at'>[]): Promise<DNCEntry[]> {
+    if (this.isDemoMode()) {
+      throw new Error('DNC management not available in demo mode');
+    }
 
     const { data, error } = await supabase
       .from('dnc_lists')
@@ -990,6 +1146,9 @@ export class DatabaseService {
   }
 
   static async checkDNCStatus(phoneNumber: string, profileId: string): Promise<boolean> {
+    if (this.isDemoMode()) {
+      return false;
+    }
 
     const { data, error } = await supabase
       .from('dnc_lists')
@@ -1008,6 +1167,9 @@ export class DatabaseService {
   }
 
   static async bulkCreateCampaignLeads(leads: Omit<CampaignLead, 'id' | 'created_at' | 'updated_at'>[]): Promise<CampaignLead[]> {
+    if (this.isDemoMode()) {
+      throw new Error('Campaign lead management not available in demo mode');
+    }
 
     const { data, error } = await supabase
       .from('campaign_leads')
@@ -1023,6 +1185,16 @@ export class DatabaseService {
   }
 
   static async createCampaignLead(lead: Omit<CampaignLead, 'id' | 'created_at' | 'updated_at'>): Promise<CampaignLead | null> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: Campaign lead creation simulated');
+      // Return a mock lead object instead of throwing error
+      return {
+        ...lead,
+        id: 'demo-lead-' + Date.now(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      } as CampaignLead;
+    }
 
     const { data, error } = await supabase
       .from('campaign_leads')
@@ -1039,6 +1211,9 @@ export class DatabaseService {
   }
 
   static async updateCampaignLead(id: string, updates: Partial<CampaignLead>): Promise<CampaignLead | null> {
+    if (this.isDemoMode()) {
+      throw new Error('Campaign lead management not available in demo mode');
+    }
 
     const { data, error } = await supabase
       .from('campaign_leads')
@@ -1056,6 +1231,9 @@ export class DatabaseService {
   }
 
   static async deleteCampaignLead(id: string): Promise<boolean> {
+    if (this.isDemoMode()) {
+      throw new Error('Campaign lead management not available in demo mode');
+    }
 
     const { error } = await supabase
       .from('campaign_leads')
@@ -1074,6 +1252,9 @@ export class DatabaseService {
 
   // Live call monitoring methods
   static async getLiveCalls(profileId: string): Promise<any[]> {
+    if (this.isDemoMode()) {
+      return this.getDemoActiveCalls();
+    }
 
     const { data, error } = await supabase
       .from('live_calls')
@@ -1093,6 +1274,9 @@ export class DatabaseService {
   }
 
   static async updateLiveCallStatus(callId: string, status: string, metadata: any = {}): Promise<boolean> {
+    if (this.isDemoMode()) {
+      return true;
+    }
 
     const { error } = await supabase
       .from('live_calls')
@@ -1119,6 +1303,9 @@ export class DatabaseService {
     agent_id?: string
     event_data: any
   }): Promise<boolean> {
+    if (this.isDemoMode()) {
+      return true;
+    }
 
     const { error } = await supabase
       .from('webhook_events')
@@ -1133,6 +1320,9 @@ export class DatabaseService {
   }
 
   static async getWebhookEvents(profileId: string, limit = 50): Promise<any[]> {
+    if (this.isDemoMode()) {
+      return [];
+    }
 
     const { data, error } = await supabase
       .from('webhook_events')
@@ -1158,6 +1348,9 @@ export class DatabaseService {
     priority?: string
     scheduled_at?: string
   }): Promise<boolean> {
+    if (this.isDemoMode()) {
+      return true;
+    }
 
     const { error } = await supabase
       .from('dialer_queue')
@@ -1172,6 +1365,9 @@ export class DatabaseService {
   }
 
   static async getDialerQueue(profileId: string, campaignId?: string): Promise<any[]> {
+    if (this.isDemoMode()) {
+      return [];
+    }
 
     let query = supabase
       .from('dialer_queue')
@@ -1200,6 +1396,9 @@ export class DatabaseService {
   }
 
   static async updateDialerQueueStatus(queueId: string, status: string, metadata: any = {}): Promise<boolean> {
+    if (this.isDemoMode()) {
+      return true;
+    }
 
     const updateData: any = { 
       status,
@@ -1231,6 +1430,9 @@ export class DatabaseService {
 
   // Campaign metrics methods
   static async getCampaignMetrics(profileId: string, campaignId?: string, days = 30): Promise<any[]> {
+    if (this.isDemoMode()) {
+      return this.getDemoCampaignMetrics();
+    }
 
     let query = supabase
       .from('campaign_metrics')
@@ -1256,6 +1458,9 @@ export class DatabaseService {
   }
 
   static async updateCampaignMetrics(profileId: string, campaignId: string, date: string, metrics: any): Promise<boolean> {
+    if (this.isDemoMode()) {
+      return true;
+    }
 
     const { error } = await supabase
       .from('campaign_metrics')
@@ -1277,6 +1482,9 @@ export class DatabaseService {
 
   // System metrics methods
   static async getSystemMetrics(profileId?: string): Promise<any[]> {
+    if (this.isDemoMode()) {
+      return this.getDemoSystemMetrics();
+    }
 
     let query = supabase
       .from('system_metrics')
@@ -1305,6 +1513,9 @@ export class DatabaseService {
     agent_id?: string
     metadata?: any
   }): Promise<boolean> {
+    if (this.isDemoMode()) {
+      return true;
+    }
 
     const { error } = await supabase
       .from('system_metrics')
@@ -1329,6 +1540,9 @@ export class DatabaseService {
     success?: boolean
     error_message?: string
   }): Promise<boolean> {
+    if (this.isDemoMode()) {
+      return true;
+    }
 
     const { error } = await supabase
       .from('function_call_logs')
@@ -1400,6 +1614,15 @@ export class DatabaseService {
 
   // Live calls operations
   static async getActiveCalls(profileId: string): Promise<ActiveCall[]> {
+    if (this.isDemoMode()) {
+      return this.getDemoCallLogs()
+        .filter(call => call.status === 'in_progress')
+        .map(call => ({
+          ...call,
+          agent_name: 'Demo Agent',
+          call_quality: 'good' as const
+        }));
+    }
 
     const { data, error } = await supabase
       .from('call_logs')
@@ -1423,6 +1646,9 @@ export class DatabaseService {
   }
 
   static async getAgentStatuses(profileId: string): Promise<AIAgent[]> {
+    if (this.isDemoMode()) {
+      return this.getDemoAgents();
+    }
 
     const { data, error } = await supabase
       .from('ai_agents')
@@ -1438,6 +1664,9 @@ export class DatabaseService {
   }
 
   static async getCallQueue(profileId: string): Promise<CallLog[]> {
+    if (this.isDemoMode()) {
+      return [];
+    }
 
     const { data, error } = await supabase
       .from('call_logs')
@@ -1455,6 +1684,10 @@ export class DatabaseService {
   }
 
   static async emergencyStopAllCalls(profileId: string): Promise<void> {
+    if (this.isDemoMode()) {
+      console.log('Demo mode: Emergency stop simulated');
+      return;
+    }
 
     const { error } = await supabase
       .from('call_logs')

@@ -2755,7 +2755,7 @@ app.get('/api/admin/stats', async (req, res) => {
             totalUsers,
             activeUsers,
             totalCalls,
-            activeCalls: Math.max(activeCalls, runningProcesses), // Use higher of actual calls or running processes
+            activeCalls: activeCalls, // Only show actual active calls, not PM2 processes
             systemUptime: systemUptime,
             serverHealth: runningProcesses === totalProcesses ? 'healthy' : 
                          runningProcesses > 0 ? 'warning' : 'error',
